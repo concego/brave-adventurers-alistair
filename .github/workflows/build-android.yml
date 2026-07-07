@@ -1,0 +1,50 @@
+name: Build Android APK
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          lfs: true
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install Android Build Tools
+        run: |
+          sdkmanager "build-tools;34.0.0" "platforms;android-34" "ndk;23.2.8568313"
+
+      - name: Setup Godot
+        uses: chickensoft-games/setup-godot@v1
+        with:
+          version: 4.3.0
+          use-dotnet: false
+          include-templates: true
+
+      - name: Export Android APK (debug)
+        run: |
+          mkdir -p build
+          godot --headless --export-debug "Android" build/brave-adventurers-alistair-debug.apk || true
+
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: brave-adventurers-alistair-debug
+          path: build/brave-adventurers-alistair-debug.apk
+          retention-days: 14
