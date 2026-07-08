@@ -1,69 +1,66 @@
-[gd_scene load_steps=6 format=3 uid="uid://game"]
+[gd_scene load_steps=5 format=3 uid="uid://game_scene"]
 
 [ext_resource type="Script" path="res://scripts/Kyle.gd" id="1"]
 [ext_resource type="Script" path="res://scripts/Enemy.gd" id="2"]
-[ext_resource type="PackedScene" path="res://scenes/hud.tscn" id="3"]
+[ext_resource type="Texture2D" path="res://assets/sprites/kyle_spritesheet.webp" id="3"]
+
+[sub_resource type="RectangleShape2D" id="shape_floor"]
+size = Vector2(1280, 32)
+
+[sub_resource type="RectangleShape2D" id="shape_kyle"]
+size = Vector2(40, 80)
 
 [node name="Game" type="Node2D"]
 
-[node name="HUD" parent="." instance=ExtResource("3")]
+[node name="Background" type="ColorRect" parent="."]
+position = Vector2(0, 0)
+size = Vector2(1280, 720)
+color = Color(0.15, 0.12, 0.08, 1)
 
-[node name="World" type="Node2D" parent="."]
+[node name="Floor" type="StaticBody2D" parent="."]
+position = Vector2(640, 680)
 
-[node name="Background" type="ColorRect" parent="World"]
-offset_left = 0.0
-offset_top = 0.0
-offset_right = 1280.0
-offset_bottom = 720.0
-color = Color(0.12, 0.10, 0.08, 1)
+[node name="CollisionShape2D" type="CollisionShape2D" parent="Floor"]
+shape = SubResource("shape_floor")
 
-[node name="Ground" type="StaticBody2D" parent="World"]
+[node name="FloorSprite" type="ColorRect" parent="Floor"]
+position = Vector2(-640, -8)
+size = Vector2(1280, 16)
+color = Color(0.3, 0.2, 0.1, 1)
 
-[node name="GroundShape" type="CollisionShape2D" parent="World/Ground"]
-
-[node name="GroundSprite" type="ColorRect" parent="World/Ground"]
-offset_left = 0.0
-offset_top = 620.0
-offset_right = 1280.0
-offset_bottom = 720.0
-color = Color(0.25, 0.18, 0.10, 1)
-
-[node name="Kyle" type="CharacterBody2D" parent="World"]
-position = Vector2(200, 560)
+[node name="Kyle" type="CharacterBody2D" parent="."]
+position = Vector2(200, 580)
 script = ExtResource("1")
-add_to_group = "player"
 
-[node name="KyleCollision" type="CollisionShape2D" parent="World/Kyle"]
+[node name="Sprite2D" type="Sprite2D" parent="Kyle"]
+texture = ExtResource("3")
+region_enabled = true
+region_rect = Rect2(0, 0, 80, 96)
+scale = Vector2(2.0, 2.0)
 
-[node name="KyleSprite" type="ColorRect" parent="World/Kyle"]
-offset_left = -24.0
-offset_top = -80.0
-offset_right = 24.0
-offset_bottom = 0.0
-color = Color(0.2, 0.4, 0.9, 1)
+[node name="CollisionShape2D" type="CollisionShape2D" parent="Kyle"]
+shape = SubResource("shape_kyle")
 
-[node name="AnimationPlayer" type="AnimationPlayer" parent="World/Kyle"]
+[node name="AnimTimer" type="Timer" parent="Kyle"]
+wait_time = 0.125
+autostart = true
 
-[node name="Enemies" type="Node2D" parent="World"]
-
-[node name="Enemy1" type="CharacterBody2D" parent="World/Enemies"]
-position = Vector2(900, 560)
-script = ExtResource("2")
-
-[node name="Enemy1Collision" type="CollisionShape2D" parent="World/Enemies/Enemy1"]
-
-[node name="Enemy1Sprite" type="ColorRect" parent="World/Enemies/Enemy1"]
-offset_left = -24.0
-offset_top = -80.0
-offset_right = 24.0
-offset_bottom = 0.0
-color = Color(0.8, 0.15, 0.1, 1)
-
-[node name="AnimationPlayer" type="AnimationPlayer" parent="World/Enemies/Enemy1"]
-
-[node name="Camera2D" type="Camera2D" parent="World/Kyle"]
-enabled = true
+[node name="Camera2D" type="Camera2D" parent="Kyle"]
+position_smoothing_enabled = true
+position_smoothing_speed = 5.0
 limit_left = 0
 limit_right = 3840
-position_smoothing_enabled = true
-position_smoothing_speed = 8.0
+limit_bottom = 720
+
+[node name="HUD" parent="." instance=ExtResource("uid://hud_scene")]
+
+[node name="Enemy" type="CharacterBody2D" parent="."]
+position = Vector2(800, 580)
+script = ExtResource("2")
+add_to_group = ["enemies"]
+
+[node name="Sprite2D" type="Sprite2D" parent="Enemy"]
+modulate = Color(0.8, 0.3, 0.3, 1)
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="Enemy"]
+shape = SubResource("shape_kyle")
