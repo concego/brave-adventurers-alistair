@@ -15,8 +15,8 @@ func _on_item_focused(index: int) -> void:
 	game.speak(menu_items[index])
 
 func _on_new_game_pressed() -> void:
-	game.speak("Iniciando novo jogo")
-	get_tree().change_scene_to_file("res://scenes/game.tscn")
+	game.speak("Iniciando novo jogo. Capítulo um. Cinzas sobre Vargheim.")
+	get_tree().change_scene_to_file("res://scenes/chapter_screen.tscn")
 
 func _on_continue_pressed() -> void:
 	game.speak("Continuar não disponível ainda")
