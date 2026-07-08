@@ -1,0 +1,40 @@
+[gd_scene load_steps=9 format=3 uid="uid://enemy_mage_scene"]
+
+[ext_resource type="Script" path="res://scripts/EnemyMage.gd" id="1"]
+[ext_resource type="AudioStream" path="res://assets/audio/sfx/enemies/sfx_enemy_hurt.ogg" id="2"]
+[ext_resource type="AudioStream" path="res://assets/audio/sfx/enemies/sfx_enemy_death.ogg" id="3"]
+[ext_resource type="AudioStream" path="res://assets/audio/sfx/enemies/sfx_magic_ice.ogg" id="4"]
+[ext_resource type="AudioStream" path="res://assets/audio/sfx/enemies/sfx_magic_shadow.ogg" id="5"]
+
+[sub_resource type="RectangleShape2D" id="shape_mage"]
+size = Vector2(36, 76)
+
+[node name="EnemyMage" type="CharacterBody2D"]
+script = ExtResource("1")
+pit_awareness = 1.0
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="."]
+shape = SubResource("shape_mage")
+
+[node name="Sprite2D" type="Sprite2D" parent="."]
+modulate = Color(0.4, 0.3, 0.8, 1)
+
+[node name="SfxHurt" type="AudioStreamPlayer" parent="."]
+stream = ExtResource("2")
+volume_db = -4.0
+bus = "SFX"
+
+[node name="SfxDeath" type="AudioStreamPlayer" parent="."]
+stream = ExtResource("3")
+volume_db = -2.0
+bus = "SFX"
+
+[node name="SfxAttack" type="AudioStreamPlayer" parent="."]
+stream = ExtResource("4")
+volume_db = -2.0
+bus = "SFX"
+
+[node name="SfxMagicShadow" type="AudioStreamPlayer" parent="."]
+stream = ExtResource("5")
+volume_db = -2.0
+bus = "SFX"
