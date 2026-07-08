@@ -26,7 +26,6 @@ jobs:
           yes | sdkmanager --licenses > /dev/null 2>&1 || true
           sdkmanager "build-tools;34.0.0" "platforms;android-34" "ndk;23.2.8568313"
           echo "ANDROID_SDK_ROOT=$ANDROID_SDK_ROOT" >> $GITHUB_ENV
-          echo "ANDROID_NDK_ROOT=$ANDROID_SDK_ROOT/ndk/23.2.8568313" >> $GITHUB_ENV
 
       - name: Install Godot 4.3
         run: |
@@ -41,55 +40,65 @@ jobs:
           TEMPLATES_DIR="$HOME/.local/share/godot/export_templates/4.3.stable"
           mkdir -p "$TEMPLATES_DIR"
           wget -q "https://github.com/godotengine/godot/releases/download/4.3-stable/Godot_v4.3-stable_export_templates.tpz" -O templates.tpz
-          unzip -q templates.tpz -d /tmp/templates_extracted
-          mv /tmp/templates_extracted/templates/* "$TEMPLATES_DIR/"
-          echo "Templates Android disponíveis:"
-          ls "$TEMPLATES_DIR/" | grep android || echo "(nenhum android encontrado)"
+          unzip -q templates.tpz -d /tmp/tpl
+          # Mover tudo para a pasta correta (sem subpasta templates/)
+          mv /tmp/tpl/templates/* "$TEMPLATES_DIR/"
+          echo "Templates Android:"
+          ls "$TEMPLATES_DIR/" | grep android
 
-      - name: Configure Godot editor settings
+      - name: Install Android build template no projeto
         run: |
-          EDITOR_DIR="$HOME/.config/godot"
-          mkdir -p "$EDITOR_DIR"
-          cat > "$EDITOR_DIR/editor_settings-4.tres" << EOF
+          # O Godot exige android/build/ com o source do template descompactado
+          TEMPLATES_DIR="$HOME/.local/share/godot/export_templates/4.3.stable"
+          mkdir -p android/build
+          unzip -q "$TEMPLATES_DIR/android_source.zip" -d android/build
+          # Criar o marcador que o Godot usa para detectar que o template está instalado
+          echo "4.3.stable" > android/.build_version
+          echo "android/build/ pronto:"
+          ls android/build/ | head -10
+
+      - name: Gerar debug.keystore
+        run: |
+          mkdir -p "$HOME/.android"
+          keytool -genkeypair -v \
+            -keystore "$HOME/.android/debug.keystore" \
+            -storepass android \
+            -alias androiddebugkey \
+            -keypass android \
+            -keyalg RSA \
+            -keysize 2048 \
+            -validity 10000 \
+            -dname "CN=Android Debug,O=Android,C=US" 2>&1 | tail -3
+          echo "Keystore criado: $(ls -lh $HOME/.android/debug.keystore)"
+
+      - name: Configurar Godot editor settings
+        run: |
+          mkdir -p "$HOME/.config/godot"
+          cat > "$HOME/.config/godot/editor_settings-4.tres" << EOF
           [gd_resource type="EditorSettings" format=3]
           [resource]
           export/android/android_sdk_path = "$ANDROID_SDK_ROOT"
+          export/android/debug_keystore = "$HOME/.android/debug.keystore"
+          export/android/debug_keystore_user = "androiddebugkey"
+          export/android/debug_keystore_pass = "android"
           EOF
 
-      - name: Pre-heat — importar assets do projeto
+      - name: Pre-heat — importar assets
         run: |
-          echo "Gerando cache .godot/ ..."
           godot --headless --editor --quit 2>&1 || true
-          echo "Conteudo .godot/:"
-          ls .godot/ 2>/dev/null || echo "(vazia)"
+          echo "Cache .godot/ gerado: $(ls .godot/ 2>/dev/null | wc -l) itens"
 
       - name: Export APK debug
         run: |
           mkdir -p build
-          echo "=== export_presets.cfg ==="
-          cat export_presets.cfg
-          echo ""
-          echo "=== Iniciando export ==="
           godot --headless --verbose --export-debug "Android" "build/brave-adventurers-alistair-debug.apk" 2>&1
-          echo "Exit code: $?"
-          echo "=== Conteudo build/ ==="
-          ls -lh build/ 2>/dev/null || echo "(build/ vazia)"
+          echo "=== build/ ==="
+          ls -lh build/
 
       - name: Upload APK
-        if: success()
         uses: actions/upload-artifact@v4
         with:
           name: brave-adventurers-alistair-debug
           path: build/brave-adventurers-alistair-debug.apk
+          if-no-files-found: error
           retention-days: 14
-
-      - name: Upload build logs (em caso de falha)
-        if: failure()
-        uses: actions/upload-artifact@v4
-        with:
-          name: build-logs-debug
-          path: |
-            build/
-            .godot/
-          retention-days: 3
-          if-no-files-found: ignore
