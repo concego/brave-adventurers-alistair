@@ -66,7 +66,6 @@ jobs:
           wget -q "https://github.com/godotengine/godot/releases/download/4.3-stable/Godot_v4.3-stable_export_templates.tpz" -O /tmp/templates.tpz
           unzip -q /tmp/templates.tpz -d /tmp/tpl
           mv /tmp/tpl/templates/* "$TEMPLATES_DIR/"
-          echo "Templates android: $(ls $TEMPLATES_DIR | grep android)"
 
       - name: Pre-heat projeto
         run: |
@@ -74,36 +73,29 @@ jobs:
           export DISPLAY=:99
           godot --headless --path "$(pwd)" --editor --quit 2>&1 || true
 
-      - name: Diagnostico — listar projeto e preset
-        run: |
-          echo "=== project.godot ==="
-          cat project.godot
-          echo ""
-          echo "=== export_presets.cfg ==="
-          cat export_presets.cfg
-          echo ""
-          echo "=== .godot/imported (amostra) ==="
-          ls .godot/imported/ 2>/dev/null | head -5 || echo "(vazio)"
-          echo ""
-          echo "=== android/ ==="
-          ls -la android/ 2>/dev/null || echo "(sem pasta android/)"
-          echo ""
-          echo "=== godot --version ==="
-          godot --version
-          echo ""
-          echo "=== Templates instalados ==="
-          ls "$HOME/.local/share/godot/export_templates/4.3.stable/" | grep android
-
-      - name: Export APK debug
+      - name: Export APK debug (capturar para annotation)
         run: |
           mkdir -p build
           Xvfb :99 -screen 0 1024x768x24 &
           export DISPLAY=:99
-          # Usar script(1) para capturar output do TTY
-          script -q -c 'godot --headless --verbose --path "'"$(pwd)"'" --export-debug "Android" "'"$(pwd)"'/build/brave-adventurers-alistair-debug.apk"' /dev/null 2>&1 || true
-          echo "=== build/ ==="
-          ls -lah build/ 2>/dev/null || echo "(vazia)"
-          [ -f "build/brave-adventurers-alistair-debug.apk" ] || exit 1
+          # Capturar output em variável
+          GODOT_OUT=$(godot --headless --verbose \
+            --path "$(pwd)" \
+            --export-debug "Android" \
+            "$(pwd)/build/brave-adventurers-alistair-debug.apk" 2>&1 || true)
+          # Imprimir via workflow command para aparecer nas annotations
+          echo "::warning::GODOT_OUTPUT_START"
+          echo "$GODOT_OUT" | head -100 | while IFS= read -r line; do
+            echo "::warning::$line"
+          done
+          echo "::warning::GODOT_OUTPUT_END"
+          # Resultado
+          if [ -f "build/brave-adventurers-alistair-debug.apk" ]; then
+            echo "::notice::APK GERADO: $(ls -lh build/brave-adventurers-alistair-debug.apk)"
+          else
+            echo "::error::APK NAO GERADO. Build/ contents: $(ls build/ 2>/dev/null || echo vazia)"
+            exit 1
+          fi
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
