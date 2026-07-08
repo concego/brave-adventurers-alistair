@@ -21,7 +21,6 @@ jobs:
 
       - name: Install Android SDK components
         run: |
-          # O runner ubuntu-latest já tem ANDROID_SDK_ROOT em /usr/local/lib/android/sdk
           export ANDROID_SDK_ROOT="${ANDROID_SDK_ROOT:-/usr/local/lib/android/sdk}"
           export PATH="$ANDROID_SDK_ROOT/cmdline-tools/latest/bin:$ANDROID_SDK_ROOT/platform-tools:$PATH"
           yes | sdkmanager --licenses > /dev/null 2>&1 || true
@@ -29,7 +28,7 @@ jobs:
           echo "ANDROID_SDK_ROOT=$ANDROID_SDK_ROOT" >> $GITHUB_ENV
           echo "ANDROID_NDK_ROOT=$ANDROID_SDK_ROOT/ndk/23.2.8568313" >> $GITHUB_ENV
 
-      - name: Setup Godot 4.3
+      - name: Install Godot 4.3
         run: |
           wget -q "https://github.com/godotengine/godot/releases/download/4.3-stable/Godot_v4.3-stable_linux.x86_64.zip" -O godot.zip
           unzip -q godot.zip
@@ -43,29 +42,38 @@ jobs:
           mkdir -p "$TEMPLATES_DIR"
           wget -q "https://github.com/godotengine/godot/releases/download/4.3-stable/Godot_v4.3-stable_export_templates.tpz" -O templates.tpz
           unzip -q templates.tpz -d /tmp/templates_extracted
-          cp /tmp/templates_extracted/templates/android_debug.apk "$TEMPLATES_DIR/"
-          cp /tmp/templates_extracted/templates/android_release.apk "$TEMPLATES_DIR/"
-          echo "Templates instalados em $TEMPLATES_DIR"
-          ls "$TEMPLATES_DIR/"
+          # Mover todos os templates para a pasta correta
+          mv /tmp/templates_extracted/templates/* "$TEMPLATES_DIR/"
+          echo "Templates instalados:"
+          ls "$TEMPLATES_DIR/" | grep android
 
-      - name: Configure Godot Android settings
+      - name: Configure Godot editor settings
         run: |
-          # Godot precisa saber onde está o SDK/NDK no editor settings
-          EDITOR_SETTINGS="$HOME/.config/godot/editor_settings-4.tres"
-          mkdir -p "$(dirname $EDITOR_SETTINGS)"
-          cat > "$EDITOR_SETTINGS" << EOF
+          EDITOR_SETTINGS_DIR="$HOME/.config/godot"
+          mkdir -p "$EDITOR_SETTINGS_DIR"
+          cat > "$EDITOR_SETTINGS_DIR/editor_settings-4.tres" << EOF
           [gd_resource type="EditorSettings" format=3]
           [resource]
           export/android/android_sdk_path = "$ANDROID_SDK_ROOT"
           EOF
-          echo "Editor settings gravado"
+          echo "Editor settings configurado com SDK: $ANDROID_SDK_ROOT"
+
+      - name: Pre-heat project (importar assets)
+        run: |
+          # ESSENCIAL: gera o cache .godot/ antes do export
+          # Sem isso o Godot trava ao tentar importar assets durante o export
+          echo "Aquecendo projeto (importando assets)..."
+          godot --headless --editor --quit || true
+          echo "Cache .godot/ gerado:"
+          ls .godot/ 2>/dev/null || echo "(pasta .godot nao criada, pode ser normal)"
 
       - name: Export APK (debug)
         run: |
           mkdir -p build
-          godot --headless --export-debug "Android" build/brave-adventurers-alistair-debug.apk
-          echo "Build status: $?"
-          ls -lh build/ || echo "Pasta build vazia"
+          echo "Iniciando export..."
+          godot --headless --verbose --export-debug "Android" build/brave-adventurers-alistair-debug.apk
+          echo "Status: $?"
+          ls -lh build/
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
