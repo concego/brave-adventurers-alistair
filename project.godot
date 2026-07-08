@@ -8,6 +8,11 @@ run/main_scene="res://scenes/main_menu.tscn"
 config/features=PackedStringArray("4.3", "Mobile")
 boot_splash/bg_color=Color(0.07, 0.07, 0.12, 1)
 
+[autoload]
+
+GameManager="*res://scripts/GameManager.gd"
+GestureController="*res://scripts/GestureController.gd"
+
 [display]
 
 window/size/viewport_width=1280
@@ -19,3 +24,7 @@ window/handheld/orientation=1
 [rendering]
 
 renderer/rendering_method="mobile"
+
+[audio]
+
+buses/default_bus_layout="res://audio_buses.tres"
