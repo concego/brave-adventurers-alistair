@@ -16,7 +16,7 @@ signal player_died
 
 # --- Progressão ---
 var attack_power: float  = 10.0
-var defense_reduction: float = 0.30   # 30% redução bloqueio normal
+var defense_reduction: float = 0.30
 var attack_hits: int     = 0
 var block_uses: int      = 0
 
@@ -40,11 +40,11 @@ var combat_timer: float  = 0.0
 # --- Ataque focado ---
 var charge_time: float   = 0.0
 var is_charging: bool    = false
-const CHARGE_MAX: float  = 0.8    # segundos para carga máxima
-const CHARGE_MIN: float  = 0.3    # mínimo para ativar crítico
+const CHARGE_MAX: float  = 0.8
+const CHARGE_MIN: float  = 0.3
 
 # --- Parry ---
-var parry_window: bool   = false  # true quando inimigo sinalizou ataque
+var parry_window: bool   = false
 
 # --- Energia ---
 const ENERGY_REGEN_COMBAT: float    = 8.0
@@ -73,6 +73,16 @@ const ANIM_FPS = {
 @onready var anim_timer: Timer = $AnimTimer
 @onready var gesture: Node     = $"/root/GestureController"
 @onready var game: Node        = $"/root/GameManager"
+
+# --- Nós de áudio ---
+@onready var sfx_attack_quick:   AudioStreamPlayer = $SfxAttackQuick
+@onready var sfx_attack_focused: AudioStreamPlayer = $SfxAttackFocused
+@onready var sfx_block:          AudioStreamPlayer = $SfxBlock
+@onready var sfx_parry:          AudioStreamPlayer = $SfxParry
+@onready var sfx_jump:           AudioStreamPlayer = $SfxJump
+@onready var sfx_hurt:           AudioStreamPlayer = $SfxHurt
+@onready var sfx_death:          AudioStreamPlayer = $SfxDeath
+@onready var sfx_level_up:       AudioStreamPlayer = $SfxLevelUp
 
 var _cur_anim: String = "idle"
 var _cur_frame: int   = 0
@@ -115,27 +125,22 @@ func _physics_process(delta: float) -> void:
 	if not is_on_floor():
 		velocity.y += GRAVITY * delta
 
-	# Carga de ataque focado
 	if is_charging:
 		charge_time += delta
 		if charge_time >= CHARGE_MAX:
-			charge_time = CHARGE_MAX  # cap
+			charge_time = CHARGE_MAX
 
-	# Bloqueio consome energia por segundo
 	if is_blocking:
 		_spend_energy(ENERGY_BLOCK_PER_SEC * delta)
 
-	# Regeneração de energia
 	var regen = ENERGY_REGEN_COMBAT if in_combat else ENERGY_REGEN_OUT
 	_gain_energy(regen * delta)
 
-	# Timer de combate (sai do combate após 4s sem tomar/dar dano)
 	if in_combat:
 		combat_timer -= delta
 		if combat_timer <= 0:
 			in_combat = false
 
-	# Movimento
 	var dir = gesture.get_left_hold_direction()
 	if dir == "right":
 		velocity.x = speed
@@ -201,6 +206,7 @@ func _attack_quick() -> void:
 	in_combat = true
 	combat_timer = 4.0
 	_play_anim("attack")
+	sfx_attack_quick.play()
 	var dir_x = 1.0 if facing_right else -1.0
 	var hit_area = Rect2(global_position + Vector2(dir_x * 40, -30), Vector2(60, 60))
 	var hit = false
@@ -236,8 +242,9 @@ func _attack_focused() -> void:
 	in_combat = true
 	combat_timer = 4.0
 	_play_anim("attack")
+	sfx_attack_focused.play()
 	var ratio = clamp(charge_time / CHARGE_MAX, 0.0, 1.0)
-	var damage = attack_power * (1.5 + ratio * 0.5)  # 1.5x a 2.0x
+	var damage = attack_power * (1.5 + ratio * 0.5)
 	var stun_time = 0.5 + ratio * 0.5
 	var dir_x = 1.0 if facing_right else -1.0
 	var hit_area = Rect2(global_position + Vector2(dir_x * 40, -40), Vector2(80, 80))
@@ -256,23 +263,22 @@ func _attack_focused() -> void:
 # --- Parry ---
 func _try_parry() -> void:
 	if parry_window and _has_energy(ENERGY_PARRY):
-		# Parry bem-sucedido
 		_spend_energy(ENERGY_PARRY)
 		_gain_energy(ENERGY_PARRY_BONUS)
 		is_blocking = true
+		sfx_parry.play()
 		game.speak("Parry")
 		_register_block_use(3)
-		# Atordoa todos os inimigos que estavam atacando
 		for enemy in get_tree().get_nodes_in_group("enemies"):
 			if enemy.has_method("stun"):
 				enemy.stun(1.0)
 		await get_tree().create_timer(0.3).timeout
 		is_blocking = false
 	else:
-		# Bloqueio normal
 		if not _has_energy(5.0):
 			return
 		is_blocking = true
+		sfx_block.play()
 		_register_block_use(1)
 		await get_tree().create_timer(0.5).timeout
 		is_blocking = false
@@ -287,6 +293,7 @@ func _jump() -> void:
 	if is_on_floor():
 		velocity.y = jump_force
 		_play_anim("jump")
+		sfx_jump.play()
 
 # --- Progressão ---
 func _register_attack_hit(xp: int) -> void:
@@ -295,6 +302,7 @@ func _register_attack_hit(xp: int) -> void:
 	var prev_level = (attack_hits - xp) / ATK_XP_PER_LEVEL
 	if level > prev_level:
 		attack_power += ATK_GAIN
+		sfx_level_up.play()
 		game.speak("Ataque fortalecido. Nível " + str(level) + ". Dano " + str(int(attack_power)))
 		emit_signal("stat_increased", "ataque", attack_power)
 
@@ -304,6 +312,7 @@ func _register_block_use(xp: int) -> void:
 	var prev_level = (block_uses - xp) / DEF_XP_PER_LEVEL
 	if level > prev_level:
 		defense_reduction = min(defense_reduction + DEF_GAIN, DEF_MAX)
+		sfx_level_up.play()
 		var pct = int(defense_reduction * 100)
 		game.speak("Defesa fortalecida. Nível " + str(level) + ". Redução " + str(pct) + " por cento")
 		emit_signal("stat_increased", "defesa", defense_reduction)
@@ -316,6 +325,8 @@ func take_damage(amount: float) -> void:
 		amount *= (1.0 - defense_reduction)
 	if is_shielded:
 		amount = 0.0
+	if amount > 0.0:
+		sfx_hurt.play()
 	hp -= amount
 	emit_signal("hp_changed", hp, max_hp)
 	if hp <= 0:
@@ -337,6 +348,7 @@ func restore_energy(amount: float) -> void:
 	_gain_energy(amount)
 
 func _die() -> void:
+	sfx_death.play()
 	_play_anim("death")
 	emit_signal("player_died")
 	await get_tree().create_timer(1.2).timeout
@@ -354,7 +366,7 @@ func get_nearest_enemy() -> Node:
 	return nearest
 
 # --- Status de efeitos ---
-var _status: Dictionary = {}  # ex: {"frozen": 1.0}
+var _status: Dictionary = {}
 
 func apply_status(status: String, duration: float) -> void:
 	_status[status] = duration
@@ -380,10 +392,10 @@ func apply_knockback(force: Vector2) -> void:
 	velocity += force
 
 # --- Parry de projéteis ---
-# Chamado pelo Projectile quando está perto o suficiente
 func try_deflect_projectile(proj: Node) -> void:
 	if parry_window and _has_energy(ENERGY_PARRY):
 		if proj.try_deflect(self):
 			_spend_energy(ENERGY_PARRY)
 			_gain_energy(ENERGY_PARRY_BONUS)
+			sfx_parry.play()
 			_register_block_use(3)
