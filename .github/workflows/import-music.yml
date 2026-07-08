@@ -10,24 +10,21 @@ on:
 jobs:
   import-music:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     steps:
       - uses: actions/checkout@v4
 
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.11'
-
       - name: Install gdown
-        run: pip install gdown
+        run: pip install --upgrade gdown
 
       - name: Download music files from Drive
         run: |
           mkdir -p assets/audio/music
-          gdown --id 1wqt_0QNFWEbO48r5IcwT4XOLsKLExQpU -O assets/audio/music/music_vargheim.ogg
-          gdown --id 1zDaH77oAMkbqloWhboUnjFwOfL38gopr -O assets/audio/music/music_menu.ogg
-          gdown --id 1LvZMBBGnfs8I1rvGWE9oRtmog6OKS1Fh -O assets/audio/music/music_chapter.ogg
-          gdown --id 1Ljn5CKYSrA36io10QXEN1UCMClBh_FLi -O assets/audio/music/music_boss.ogg
+          gdown --fuzzy "https://drive.google.com/file/d/1wqt_0QNFWEbO48r5IcwT4XOLsKLExQpU/view" -O assets/audio/music/music_vargheim.ogg
+          gdown --fuzzy "https://drive.google.com/file/d/1zDaH77oAMkbqloWhboUnjFwOfL38gopr/view" -O assets/audio/music/music_menu.ogg
+          gdown --fuzzy "https://drive.google.com/file/d/1LvZMBBGnfs8I1rvGWE9oRtmog6OKS1Fh/view" -O assets/audio/music/music_chapter.ogg
+          gdown --fuzzy "https://drive.google.com/file/d/1Ljn5CKYSrA36io10QXEN1UCMClBh_FLi/view" -O assets/audio/music/music_boss.ogg
           ls -lh assets/audio/music/
 
       - name: Commit and push
@@ -35,5 +32,6 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add assets/audio/music/
-          git commit -m "feat: músicas Kevin MacLeod CC0 via Drive import"
+          git status
+          git commit -m "feat: musicas Kevin MacLeod CC0 (menu, batalha, boss, capitulo)" || echo "nada a commitar"
           git push
