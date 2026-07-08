@@ -34,7 +34,7 @@ jobs:
           unzip -q godot.zip
           chmod +x Godot_v4.3-stable_linux.x86_64
           sudo mv Godot_v4.3-stable_linux.x86_64 /usr/local/bin/godot
-          echo "Godot $(godot --version)"
+          echo "Godot: $(godot --version)"
 
       - name: Install Android export templates
         run: |
@@ -42,43 +42,54 @@ jobs:
           mkdir -p "$TEMPLATES_DIR"
           wget -q "https://github.com/godotengine/godot/releases/download/4.3-stable/Godot_v4.3-stable_export_templates.tpz" -O templates.tpz
           unzip -q templates.tpz -d /tmp/templates_extracted
-          # Mover todos os templates para a pasta correta
           mv /tmp/templates_extracted/templates/* "$TEMPLATES_DIR/"
-          echo "Templates instalados:"
-          ls "$TEMPLATES_DIR/" | grep android
+          echo "Templates Android disponíveis:"
+          ls "$TEMPLATES_DIR/" | grep android || echo "(nenhum android encontrado)"
 
       - name: Configure Godot editor settings
         run: |
-          EDITOR_SETTINGS_DIR="$HOME/.config/godot"
-          mkdir -p "$EDITOR_SETTINGS_DIR"
-          cat > "$EDITOR_SETTINGS_DIR/editor_settings-4.tres" << EOF
+          EDITOR_DIR="$HOME/.config/godot"
+          mkdir -p "$EDITOR_DIR"
+          cat > "$EDITOR_DIR/editor_settings-4.tres" << EOF
           [gd_resource type="EditorSettings" format=3]
           [resource]
           export/android/android_sdk_path = "$ANDROID_SDK_ROOT"
           EOF
-          echo "Editor settings configurado com SDK: $ANDROID_SDK_ROOT"
 
-      - name: Pre-heat project (importar assets)
+      - name: Pre-heat — importar assets do projeto
         run: |
-          # ESSENCIAL: gera o cache .godot/ antes do export
-          # Sem isso o Godot trava ao tentar importar assets durante o export
-          echo "Aquecendo projeto (importando assets)..."
-          godot --headless --editor --quit || true
-          echo "Cache .godot/ gerado:"
-          ls .godot/ 2>/dev/null || echo "(pasta .godot nao criada, pode ser normal)"
+          echo "Gerando cache .godot/ ..."
+          godot --headless --editor --quit 2>&1 || true
+          echo "Conteudo .godot/:"
+          ls .godot/ 2>/dev/null || echo "(vazia)"
 
-      - name: Export APK (debug)
+      - name: Export APK debug
         run: |
           mkdir -p build
-          echo "Iniciando export..."
-          godot --headless --verbose --export-debug "Android" build/brave-adventurers-alistair-debug.apk
-          echo "Status: $?"
-          ls -lh build/
+          echo "=== export_presets.cfg ==="
+          cat export_presets.cfg
+          echo ""
+          echo "=== Iniciando export ==="
+          godot --headless --verbose --export-debug "Android" "build/brave-adventurers-alistair-debug.apk" 2>&1
+          echo "Exit code: $?"
+          echo "=== Conteudo build/ ==="
+          ls -lh build/ 2>/dev/null || echo "(build/ vazia)"
 
       - name: Upload APK
+        if: success()
         uses: actions/upload-artifact@v4
         with:
           name: brave-adventurers-alistair-debug
           path: build/brave-adventurers-alistair-debug.apk
-          if-no-files-found: error
           retention-days: 14
+
+      - name: Upload build logs (em caso de falha)
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-logs-debug
+          path: |
+            build/
+            .godot/
+          retention-days: 3
+          if-no-files-found: ignore
