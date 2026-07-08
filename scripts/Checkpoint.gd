@@ -10,8 +10,11 @@ signal checkpoint_activated(checkpoint: Node)
 
 var is_active: bool = false
 
-@onready var game: Node    = $"/root/GameManager"
-@onready var sprite: Node  = $Sprite2D
+@onready var game: Node   = $"/root/GameManager"
+@onready var sprite: Node = $Sprite2D
+
+# --- Áudio ---
+@onready var sfx_checkpoint: AudioStreamPlayer = $SfxCheckpoint
 
 func _ready() -> void:
 	body_entered.connect(_on_body_entered)
@@ -29,6 +32,7 @@ func _activate() -> void:
 	is_active = true
 	emit_signal("checkpoint_activated", self)
 	game.set_active_checkpoint(self)
+	sfx_checkpoint.play()
 	game.speak("Checkpoint ativado")
 	_update_visual()
 
@@ -48,6 +52,5 @@ func deactivate() -> void:
 func _update_visual() -> void:
 	if not sprite:
 		return
-	# Cor: cinza = inativo, dourado = ativo
-	if sprite.has_method("set") :
+	if sprite.has_method("set"):
 		sprite.modulate = Color(1.0, 0.85, 0.1) if is_active else Color(0.5, 0.5, 0.5)
