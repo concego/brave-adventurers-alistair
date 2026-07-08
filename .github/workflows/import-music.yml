@@ -2,10 +2,6 @@ name: Import Music from Drive
 
 on:
   workflow_dispatch:
-    inputs:
-      confirm:
-        description: 'Type YES to import music files from Drive'
-        required: true
 
 jobs:
   import-music:
@@ -16,15 +12,18 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Install gdown
-        run: pip install --upgrade gdown
+        run: pip install --upgrade "gdown==6.1.0"
 
       - name: Download music files from Drive
         run: |
           mkdir -p assets/audio/music
-          gdown --fuzzy "https://drive.google.com/file/d/1wqt_0QNFWEbO48r5IcwT4XOLsKLExQpU/view" -O assets/audio/music/music_vargheim.ogg
-          gdown --fuzzy "https://drive.google.com/file/d/1zDaH77oAMkbqloWhboUnjFwOfL38gopr/view" -O assets/audio/music/music_menu.ogg
-          gdown --fuzzy "https://drive.google.com/file/d/1LvZMBBGnfs8I1rvGWE9oRtmog6OKS1Fh/view" -O assets/audio/music/music_chapter.ogg
-          gdown --fuzzy "https://drive.google.com/file/d/1Ljn5CKYSrA36io10QXEN1UCMClBh_FLi/view" -O assets/audio/music/music_boss.ogg
+          python3 -c "
+import gdown
+gdown.download(id='1wqt_0QNFWEbO48r5IcwT4XOLsKLExQpU', output='assets/audio/music/music_vargheim.ogg', quiet=False)
+gdown.download(id='1zDaH77oAMkbqloWhboUnjFwOfL38gopr', output='assets/audio/music/music_menu.ogg', quiet=False)
+gdown.download(id='1LvZMBBGnfs8I1rvGWE9oRtmog6OKS1Fh', output='assets/audio/music/music_chapter.ogg', quiet=False)
+gdown.download(id='1Ljn5CKYSrA36io10QXEN1UCMClBh_FLi', output='assets/audio/music/music_boss.ogg', quiet=False)
+"
           ls -lh assets/audio/music/
 
       - name: Commit and push
@@ -32,6 +31,5 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add assets/audio/music/
-          git status
-          git commit -m "feat: musicas Kevin MacLeod CC0 (menu, batalha, boss, capitulo)" || echo "nada a commitar"
+          git commit -m "feat: musicas Kevin MacLeod CC0 (vargheim, menu, chapter, boss)" || echo "nada a commitar"
           git push
