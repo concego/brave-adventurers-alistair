@@ -10,7 +10,7 @@ enum TrapType { SPIKES, FIRE, PIT, PENDULUM, TRAPDOOR }
 @export var damage: float          = 15.0
 @export var damage_per_sec: float  = 5.0
 @export var knockback_force: float = 250.0
-@export var fire_duration: float   = 0.0   # 0 = permanente
+@export var fire_duration: float   = 0.0
 @export var pendulum_speed: float  = 1.5
 @export var pendulum_range: float  = 80.0
 
@@ -18,10 +18,16 @@ var _fire_timer: float   = 0.0
 var _is_temporary: bool  = false
 var _pendulum_angle: float = 0.0
 var _pendulum_dir: float   = 1.0
-var _bodies_inside: Array  = []   # quem está no fogo agora
+var _bodies_inside: Array  = []
 var _damage_tick: float    = 0.0
 
 @onready var game: Node = $"/root/GameManager"
+
+# --- Áudio ---
+@onready var sfx_spikes:   AudioStreamPlayer = $SfxSpikes
+@onready var sfx_fire:     AudioStreamPlayer = $SfxFire
+@onready var sfx_pendulum: AudioStreamPlayer = $SfxPendulum
+@onready var sfx_pit_fall: AudioStreamPlayer = $SfxPitFall
 
 func _ready() -> void:
 	body_entered.connect(_on_body_entered)
@@ -29,15 +35,19 @@ func _ready() -> void:
 	if trap_type == TrapType.FIRE and fire_duration > 0:
 		_is_temporary = true
 		_fire_timer   = fire_duration
+	# Fogo toca em loop enquanto ativo
+	if trap_type == TrapType.FIRE and sfx_fire:
+		sfx_fire.play()
 
 func _process(delta: float) -> void:
 	if _is_temporary:
 		_fire_timer -= delta
 		if _fire_timer <= 0:
+			if sfx_fire:
+				sfx_fire.stop()
 			queue_free()
 			return
 
-	# Tick de fogo para todos os corpos dentro
 	if trap_type == TrapType.FIRE and _bodies_inside.size() > 0:
 		_damage_tick -= delta
 		if _damage_tick <= 0:
@@ -46,7 +56,6 @@ func _process(delta: float) -> void:
 				if is_instance_valid(body) and body.has_method("take_damage"):
 					body.take_damage(damage_per_sec)
 
-	# Pêndulo oscila
 	if trap_type == TrapType.PENDULUM:
 		_pendulum_angle += pendulum_speed * _pendulum_dir * delta
 		if abs(_pendulum_angle) >= deg_to_rad(60):
@@ -60,6 +69,8 @@ func _on_body_entered(body: Node) -> void:
 	match trap_type:
 		TrapType.SPIKES:
 			body.take_damage(damage)
+			if sfx_spikes:
+				sfx_spikes.play()
 			if body.is_in_group("player"):
 				game.speak("Espinhos")
 
@@ -71,15 +82,18 @@ func _on_body_entered(body: Node) -> void:
 				game.speak("Fogo")
 
 		TrapType.PIT:
+			if sfx_pit_fall:
+				sfx_pit_fall.play()
 			body.take_damage(9999.0)
 			if body.is_in_group("player"):
 				game.speak("Caiu no abismo")
 			elif body.is_in_group("enemies"):
-				# Inimigo cai — remove imediatamente
 				body.queue_free()
 
 		TrapType.PENDULUM:
 			body.take_damage(damage)
+			if sfx_pendulum:
+				sfx_pendulum.play()
 			var kb_dir = (body.global_position - global_position).normalized()
 			if body.has_method("apply_knockback"):
 				body.apply_knockback(kb_dir * knockback_force)
@@ -100,6 +114,8 @@ func _open_trapdoor(body: Node) -> void:
 		col.set_deferred("disabled", true)
 	await get_tree().create_timer(0.3).timeout
 	if is_instance_valid(body) and body.has_method("take_damage"):
+		if sfx_pit_fall:
+			sfx_pit_fall.play()
 		body.take_damage(9999.0)
 		if body.is_in_group("enemies"):
 			body.queue_free()
