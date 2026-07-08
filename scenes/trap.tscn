@@ -1,6 +1,10 @@
-[gd_scene load_steps=3 format=3 uid="uid://trap_scene"]
+[gd_scene load_steps=8 format=3 uid="uid://trap_scene"]
 
 [ext_resource type="Script" path="res://scripts/Trap.gd" id="1"]
+[ext_resource type="AudioStream" path="res://assets/audio/sfx/traps/sfx_spikes.ogg" id="2"]
+[ext_resource type="AudioStream" path="res://assets/audio/sfx/traps/sfx_fire_loop.ogg" id="3"]
+[ext_resource type="AudioStream" path="res://assets/audio/sfx/traps/sfx_pendulum.ogg" id="4"]
+[ext_resource type="AudioStream" path="res://assets/audio/sfx/traps/sfx_pit_fall.ogg" id="5"]
 
 [sub_resource type="RectangleShape2D" id="shape_trap"]
 size = Vector2(48, 16)
@@ -15,3 +19,23 @@ shape = SubResource("shape_trap")
 position = Vector2(-24, -8)
 size = Vector2(48, 16)
 color = Color(0.7, 0.1, 0.1, 1)
+
+[node name="SfxSpikes" type="AudioStreamPlayer" parent="."]
+stream = ExtResource("2")
+volume_db = -2.0
+bus = "SFX"
+
+[node name="SfxFire" type="AudioStreamPlayer" parent="."]
+stream = ExtResource("3")
+volume_db = -6.0
+bus = "SFX"
+
+[node name="SfxPendulum" type="AudioStreamPlayer" parent="."]
+stream = ExtResource("4")
+volume_db = -4.0
+bus = "SFX"
+
+[node name="SfxPitFall" type="AudioStreamPlayer" parent="."]
+stream = ExtResource("5")
+volume_db = -2.0
+bus = "SFX"
