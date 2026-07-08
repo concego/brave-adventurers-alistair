@@ -1,6 +1,7 @@
-[gd_scene load_steps=3 format=3 uid="uid://checkpoint_scene"]
+[gd_scene load_steps=5 format=3 uid="uid://checkpoint_scene"]
 
 [ext_resource type="Script" path="res://scripts/Checkpoint.gd" id="1"]
+[ext_resource type="AudioStream" path="res://assets/audio/sfx/ui/sfx_checkpoint.ogg" id="2"]
 
 [sub_resource type="RectangleShape2D" id="shape_cp"]
 size = Vector2(32, 64)
@@ -18,3 +19,8 @@ position = Vector2(0, -24)
 position = Vector2(-16, -56)
 size = Vector2(32, 56)
 color = Color(0.5, 0.5, 0.5, 0.85)
+
+[node name="SfxCheckpoint" type="AudioStreamPlayer" parent="."]
+stream = ExtResource("2")
+volume_db = 0.0
+bus = "SFX"
