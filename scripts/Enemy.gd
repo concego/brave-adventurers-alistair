@@ -1,29 +1,29 @@
-# Enemy.gd — IA básica de inimigo
-# Estados: patrol → chase → attack → flee (quando HP baixo)
+# Enemy.gd — IA de inimigo com sinalização de ataque para parry
 
 extends CharacterBody2D
 
-signal heavy_attack_warning
 signal enemy_fleeing
 
-@export var speed: float = 80.0
-@export var max_hp: float = 50.0
-@export var attack_damage: float = 10.0
-@export var attack_range: float = 60.0
-@export var detection_range: float = 300.0
-@export var flee_hp_threshold: float = 0.25
+@export var speed: float              = 80.0
+@export var max_hp: float             = 50.0
+@export var attack_damage: float      = 10.0
+@export var attack_range: float       = 60.0
+@export var detection_range: float    = 300.0
+@export var flee_hp_threshold: float  = 0.25
+@export var parry_window_time: float  = 0.35  # janela de parry em segundos
 
 const GRAVITY: float = 980.0
-const FRAME_W: int = 80
-const FRAME_H: int = 96
+const FRAME_W: int   = 80
+const FRAME_H: int   = 96
 
-var hp: float = 50.0
-var state: String = "patrol"
-var player: Node = null
-var patrol_dir: float = 1.0
+var hp: float           = 50.0
+var state: String       = "patrol"
+var player: Node        = null
+var patrol_dir: float   = 1.0
 var patrol_timer: float = 0.0
 var attack_cooldown: float = 0.0
-var facing_right: bool = false
+var stun_timer: float   = 0.0
+var facing_right: bool  = false
 
 @onready var sprite: Sprite2D  = $Sprite2D
 @onready var anim_timer: Timer = $AnimTimer
@@ -31,10 +31,7 @@ var facing_right: bool = false
 var _cur_anim: String = "idle"
 var _cur_frame: int   = 0
 
-# Spritesheet placeholder (vermelho monocromático até ter sprite definitivo)
-const ANIM_ROW = {
-	"idle": 0, "walk": 1, "attack": 2, "hit": 3, "death": 4
-}
+const ANIM_ROW    = {"idle": 0, "walk": 1, "attack": 2, "hit": 3, "death": 4}
 const ANIM_FRAMES = {"idle": 2, "walk": 4, "attack": 3, "hit": 2, "death": 4}
 const ANIM_FPS    = {"idle": 6, "walk": 8, "attack": 12, "hit": 8, "death": 5}
 
@@ -49,9 +46,8 @@ func _advance_frame() -> void:
 	if not sprite or not sprite.texture:
 		return
 	_cur_frame = (_cur_frame + 1) % ANIM_FRAMES.get(_cur_anim, 1)
-	var row = ANIM_ROW.get(_cur_anim, 0)
 	sprite.region_enabled = true
-	sprite.region_rect = Rect2(_cur_frame * FRAME_W, row * FRAME_H, FRAME_W, FRAME_H)
+	sprite.region_rect = Rect2(_cur_frame * FRAME_W, ANIM_ROW.get(_cur_anim, 0) * FRAME_H, FRAME_W, FRAME_H)
 	sprite.flip_h = facing_right
 
 func _play_anim(anim: String) -> void:
@@ -69,6 +65,13 @@ func _physics_process(delta: float) -> void:
 
 	attack_cooldown = max(attack_cooldown - delta, 0.0)
 
+	# Atordoado — não faz nada
+	if stun_timer > 0:
+		stun_timer -= delta
+		velocity.x = 0
+		move_and_slide()
+		return
+
 	match state:
 		"patrol": _patrol(delta)
 		"chase":  _chase()
@@ -82,11 +85,9 @@ func _patrol(delta: float) -> void:
 	if patrol_timer <= 0:
 		patrol_dir *= -1
 		patrol_timer = randf_range(1.5, 3.0)
-
 	velocity.x = speed * patrol_dir * 0.5
 	facing_right = patrol_dir > 0
 	_play_anim("walk")
-
 	if player and global_position.distance_to(player.global_position) < detection_range:
 		state = "chase"
 
@@ -116,17 +117,21 @@ func _do_attack() -> void:
 		return
 	if attack_cooldown > 0.0:
 		velocity.x = 0
+		_play_anim("idle")
 		return
 
-	# Avisa o jogador antes de golpear (cue acessível)
-	emit_signal("heavy_attack_warning")
-	_play_anim("attack")
-	attack_cooldown = 1.2
+	# --- Sinaliza o ataque: abre janela de parry no jogador ---
+	if player.has_method("open_parry_window"):
+		player.open_parry_window()
 
-	# Aplica dano depois de um pequeno delay (tempo para o jogador reagir)
-	get_tree().create_timer(0.4).timeout.connect(func():
-		if player and global_position.distance_to(player.global_position) <= attack_range:
-			player.take_damage(attack_damage)
+	_play_anim("attack")
+	attack_cooldown = 1.4
+
+	# Delay antes do golpe — tempo para o jogador reagir
+	get_tree().create_timer(parry_window_time + 0.05).timeout.connect(func():
+		if player and global_position.distance_to(player.global_position) <= attack_range * 1.2:
+			if not player.is_blocking:
+				player.take_damage(attack_damage)
 	)
 
 func _flee() -> void:
@@ -148,8 +153,34 @@ func take_damage(amount: float) -> void:
 		state = "flee"
 		emit_signal("enemy_fleeing")
 
+func stun(duration: float) -> void:
+	stun_timer = duration
+	velocity.x = 0
+
 func _die() -> void:
 	remove_from_group("enemies")
 	_play_anim("death")
+	_maybe_drop_item()
 	await get_tree().create_timer(0.8).timeout
 	queue_free()
+
+func _maybe_drop_item() -> void:
+	if randf() > 0.30:  # 30% de chance de drop
+		return
+	var item_scene = load("res://scenes/item.tscn")
+	if not item_scene:
+		return
+	var item = item_scene.instantiate()
+	# Tipo aleatório: 0=comida, 1=pocao_pequena, 2=pocao_grande, 3=elixir
+	var weights = [0.40, 0.30, 0.15, 0.15]
+	var roll = randf()
+	var acc = 0.0
+	var tipo = 0
+	for i in range(weights.size()):
+		acc += weights[i]
+		if roll <= acc:
+			tipo = i
+			break
+	item.item_type = tipo
+	item.global_position = global_position
+	get_parent().add_child(item)
