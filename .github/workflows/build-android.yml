@@ -42,7 +42,6 @@ jobs:
           wget -q "https://github.com/godotengine/godot/releases/download/4.3-stable/Godot_v4.3-stable_export_templates.tpz" -O templates.tpz
           unzip -q templates.tpz -d /tmp/tpl
           mv /tmp/tpl/templates/* "$TEMPLATES_DIR/"
-          echo "Templates Android:"
           ls "$TEMPLATES_DIR/" | grep android
 
       - name: Install Android build template no projeto
@@ -51,20 +50,16 @@ jobs:
           mkdir -p android/build
           unzip -q "$TEMPLATES_DIR/android_source.zip" -d android/build
           echo "4.3.stable" > android/.build_version
-          echo "android/build/ pronto: $(ls android/build/ | wc -l) itens"
+          echo "android/build pronto: $(ls android/build | wc -l) itens"
 
       - name: Gerar debug.keystore
         run: |
           mkdir -p "$HOME/.android"
           keytool -genkeypair -v \
             -keystore "$HOME/.android/debug.keystore" \
-            -storepass android \
-            -alias androiddebugkey \
-            -keypass android \
-            -keyalg RSA \
-            -keysize 2048 \
-            -validity 10000 \
-            -dname "CN=Android Debug,O=Android,C=US" 2>&1 | tail -3
+            -storepass android -alias androiddebugkey -keypass android \
+            -keyalg RSA -keysize 2048 -validity 10000 \
+            -dname "CN=Android Debug,O=Android,C=US" 2>&1 | tail -2
 
       - name: Configurar Godot editor settings
         run: |
@@ -81,31 +76,31 @@ jobs:
       - name: Pre-heat — importar assets
         run: |
           godot --headless --editor --quit 2>&1 || true
+          echo "Cache: $(ls .godot/ 2>/dev/null | wc -l) itens"
 
-      - name: Export APK debug
+      - name: Export APK debug (capturando log inline)
         run: |
           mkdir -p build
-          # Capturar output completo para artifact
-          godot --headless --verbose --export-debug "Android" "build/brave-adventurers-alistair-debug.apk" 2>&1 | tee build/godot_export.log
-          GODOT_EXIT=${PIPESTATUS[0]}
-          echo "Godot exit code: $GODOT_EXIT"
-          ls -lh build/
-          exit $GODOT_EXIT
+          echo "====== GODOT EXPORT LOG ======"
+          godot --headless --verbose \
+            --export-debug "Android" \
+            "build/brave-adventurers-alistair-debug.apk" 2>&1 || true
+          echo "====== FIM DO LOG ======"
+          echo ""
+          echo "=== Resultado ==="
+          if [ -f "build/brave-adventurers-alistair-debug.apk" ]; then
+            ls -lh build/brave-adventurers-alistair-debug.apk
+            echo "APK GERADO COM SUCESSO"
+          else
+            echo "APK NAO ENCONTRADO"
+            ls -lah build/ 2>/dev/null || echo "(build/ vazia)"
+            exit 1
+          fi
 
       - name: Upload APK
-        if: success()
         uses: actions/upload-artifact@v4
         with:
           name: brave-adventurers-alistair-debug
           path: build/brave-adventurers-alistair-debug.apk
           if-no-files-found: error
           retention-days: 14
-
-      - name: Upload logs (falha)
-        if: failure()
-        uses: actions/upload-artifact@v4
-        with:
-          name: godot-export-log
-          path: build/godot_export.log
-          retention-days: 3
-          if-no-files-found: ignore
