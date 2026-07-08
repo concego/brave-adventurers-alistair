@@ -1,0 +1,78 @@
+[gd_scene load_steps=14 format=3 uid="uid://kyle_scene"]
+
+[ext_resource type="Script" path="res://scripts/Kyle.gd" id="1"]
+[ext_resource type="Texture2D" path="res://assets/sprites/kyle_spritesheet.webp" id="2"]
+[ext_resource type="AudioStream" path="res://assets/audio/sfx/kyle/sfx_attack_quick.ogg" id="3"]
+[ext_resource type="AudioStream" path="res://assets/audio/sfx/kyle/sfx_attack_focused.ogg" id="4"]
+[ext_resource type="AudioStream" path="res://assets/audio/sfx/kyle/sfx_block.ogg" id="5"]
+[ext_resource type="AudioStream" path="res://assets/audio/sfx/kyle/sfx_parry.ogg" id="6"]
+[ext_resource type="AudioStream" path="res://assets/audio/sfx/kyle/sfx_jump.ogg" id="7"]
+[ext_resource type="AudioStream" path="res://assets/audio/sfx/kyle/sfx_hurt.ogg" id="8"]
+[ext_resource type="AudioStream" path="res://assets/audio/sfx/kyle/sfx_death.ogg" id="9"]
+[ext_resource type="AudioStream" path="res://assets/audio/sfx/kyle/sfx_level_up.ogg" id="10"]
+
+[sub_resource type="RectangleShape2D" id="shape_kyle"]
+size = Vector2(40, 80)
+
+[node name="Kyle" type="CharacterBody2D"]
+script = ExtResource("1")
+
+[node name="Sprite2D" type="Sprite2D" parent="."]
+texture = ExtResource("2")
+region_enabled = true
+region_rect = Rect2(0, 0, 80, 96)
+scale = Vector2(2.0, 2.0)
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="."]
+shape = SubResource("shape_kyle")
+
+[node name="AnimTimer" type="Timer" parent="."]
+wait_time = 0.125
+autostart = true
+
+[node name="Camera2D" type="Camera2D" parent="."]
+position_smoothing_enabled = true
+position_smoothing_speed = 5.0
+limit_left = 0
+limit_right = 3840
+limit_bottom = 720
+
+[node name="SfxAttackQuick" type="AudioStreamPlayer" parent="."]
+stream = ExtResource("3")
+volume_db = -4.0
+bus = "SFX"
+
+[node name="SfxAttackFocused" type="AudioStreamPlayer" parent="."]
+stream = ExtResource("4")
+volume_db = -2.0
+bus = "SFX"
+
+[node name="SfxBlock" type="AudioStreamPlayer" parent="."]
+stream = ExtResource("5")
+volume_db = -4.0
+bus = "SFX"
+
+[node name="SfxParry" type="AudioStreamPlayer" parent="."]
+stream = ExtResource("6")
+volume_db = 0.0
+bus = "SFX"
+
+[node name="SfxJump" type="AudioStreamPlayer" parent="."]
+stream = ExtResource("7")
+volume_db = -6.0
+bus = "SFX"
+
+[node name="SfxHurt" type="AudioStreamPlayer" parent="."]
+stream = ExtResource("8")
+volume_db = -2.0
+bus = "SFX"
+
+[node name="SfxDeath" type="AudioStreamPlayer" parent="."]
+stream = ExtResource("9")
+volume_db = 0.0
+bus = "SFX"
+
+[node name="SfxLevelUp" type="AudioStreamPlayer" parent="."]
+stream = ExtResource("10")
+volume_db = 0.0
+bus = "SFX"
