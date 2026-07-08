@@ -9,7 +9,6 @@ signal chapter_finished
 @export var chapter_number: int = 1
 @export var next_scene: String = "res://scenes/game.tscn"
 
-# Textos de cada capítulo — índice = número do capítulo
 const CHAPTER_TITLES = {
 	1: "Capítulo I — Cinzas sobre Vargheim",
 	2: "Capítulo II — O Que os Corvos Ouviram",
@@ -28,36 +27,37 @@ const CHAPTER_TEXTS = {
 	6: "Kyle Alistair não aceitou o título.\n\nO rei o ofereceu com toda a pompa. Kyle ouviu em silêncio. E falou apenas uma coisa:\n\n\"Devolva Vargheim ao seu povo.\"\n\nO decreto foi assinado ao amanhecer.\n\nKyle partiu antes do meio-dia, sem fanfarra, sem escolta.\nSó o escudo. Só a estrada. Só os dois corvos que subiram ao céu, satisfeitos.\n\nO Pendurado cuida dos seus.\nMas os seus precisam saber o que pedir.\n\nVargheim o esperava.\nO Lobo voltou para casa.\n\n— Fim da Saga de Kyle Alistair —"
 }
 
-@onready var book_bg: TextureRect = $BookBG
-@onready var title_label: Label = $BookContent/Title
-@onready var text_label: Label = $BookContent/Text
-@onready var continue_label: Label = $ContinueHint
+@onready var book_bg: TextureRect         = $BookBG
+@onready var title_label: Label           = $BookContent/Title
+@onready var text_label: Label            = $BookContent/Text
+@onready var continue_label: Label        = $ContinueHint
 @onready var page_flip_sound: AudioStreamPlayer = $PageFlipSound
 @onready var raven_sprite: AnimatedSprite2D = $RavenSprite
-@onready var anim: AnimationPlayer = $AnimationPlayer
-@onready var game_manager: Node = $"/root/GameManager"
+@onready var anim: AnimationPlayer        = $AnimationPlayer
+@onready var game_manager: Node           = $"/root/GameManager"
 
 var _can_continue: bool = false
-var _tts_finished: bool = false
 
 func _ready() -> void:
 	title_label.text = CHAPTER_TITLES.get(chapter_number, "")
-	text_label.text = CHAPTER_TEXTS.get(chapter_number, "")
+	text_label.text  = CHAPTER_TEXTS.get(chapter_number, "")
 	continue_label.modulate.a = 0.0
 	_can_continue = false
 
-	# Toca som de virar página ao entrar
+	# Música de capítulo
+	game_manager.play_music(GameManager.MusicTrack.CHAPTER)
+
+	# Som de virar página
 	page_flip_sound.play()
 
-	# Animação de entrada (fade in)
+	# Animação de entrada
 	anim.play("fade_in")
 
-	# TTS lê o título e o texto
+	# TTS lê título + texto
 	await get_tree().create_timer(0.8).timeout
 	var full_text = CHAPTER_TITLES.get(chapter_number, "") + ". " + CHAPTER_TEXTS.get(chapter_number, "")
 	game_manager.speak(full_text)
 
-	# Libera o toque após tempo proporcional ao texto
 	var read_time = full_text.length() * 0.045
 	await get_tree().create_timer(read_time).timeout
 	_can_continue = true
@@ -82,4 +82,7 @@ func _go_next() -> void:
 	page_flip_sound.play()
 	anim.play("fade_out")
 	await anim.animation_finished
+	# Fade music antes de entrar na fase
+	game_manager.fade_music(0.5)
+	await get_tree().create_timer(0.5).timeout
 	get_tree().change_scene_to_file(next_scene)
