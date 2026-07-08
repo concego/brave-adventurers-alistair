@@ -66,34 +66,39 @@ jobs:
           wget -q "https://github.com/godotengine/godot/releases/download/4.3-stable/Godot_v4.3-stable_export_templates.tpz" -O /tmp/templates.tpz
           unzip -q /tmp/templates.tpz -d /tmp/tpl
           mv /tmp/tpl/templates/* "$TEMPLATES_DIR/"
+          echo "Templates android: $(ls $TEMPLATES_DIR | grep android)"
+          echo "TEMPLATES_DIR=$TEMPLATES_DIR" >> $GITHUB_ENV
 
       - name: Pre-heat projeto
+        working-directory: ${{ github.workspace }}
         run: |
           Xvfb :99 -screen 0 1024x768x24 &
           export DISPLAY=:99
-          godot --headless --path "$(pwd)" --editor --quit 2>&1 || true
+          echo "Projeto em: $GITHUB_WORKSPACE"
+          ls "$GITHUB_WORKSPACE/project.godot"
+          godot --headless --path "$GITHUB_WORKSPACE" --editor --quit 2>&1 || true
+          echo "Cache: $(ls .godot/ 2>/dev/null | wc -l) itens"
 
-      - name: Export APK debug (capturar para annotation)
+      - name: Export APK debug
+        working-directory: ${{ github.workspace }}
         run: |
           mkdir -p build
           Xvfb :99 -screen 0 1024x768x24 &
           export DISPLAY=:99
-          # Capturar output em variável
+          echo "::notice::Projeto: $GITHUB_WORKSPACE"
+          echo "::notice::project.godot: $(ls -la $GITHUB_WORKSPACE/project.godot)"
+          echo "::notice::export_presets: $(head -3 $GITHUB_WORKSPACE/export_presets.cfg)"
           GODOT_OUT=$(godot --headless --verbose \
-            --path "$(pwd)" \
+            --path "$GITHUB_WORKSPACE" \
             --export-debug "Android" \
-            "$(pwd)/build/brave-adventurers-alistair-debug.apk" 2>&1 || true)
-          # Imprimir via workflow command para aparecer nas annotations
-          echo "::warning::GODOT_OUTPUT_START"
-          echo "$GODOT_OUT" | head -100 | while IFS= read -r line; do
+            "$GITHUB_WORKSPACE/build/brave-adventurers-alistair-debug.apk" 2>&1 || true)
+          echo "$GODOT_OUT" | head -80 | while IFS= read -r line; do
             echo "::warning::$line"
           done
-          echo "::warning::GODOT_OUTPUT_END"
-          # Resultado
-          if [ -f "build/brave-adventurers-alistair-debug.apk" ]; then
-            echo "::notice::APK GERADO: $(ls -lh build/brave-adventurers-alistair-debug.apk)"
+          if [ -f "$GITHUB_WORKSPACE/build/brave-adventurers-alistair-debug.apk" ]; then
+            echo "::notice::APK GERADO OK"
           else
-            echo "::error::APK NAO GERADO. Build/ contents: $(ls build/ 2>/dev/null || echo vazia)"
+            echo "::error::APK NAO GERADO"
             exit 1
           fi
 
@@ -101,6 +106,6 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: brave-adventurers-alistair-debug
-          path: build/brave-adventurers-alistair-debug.apk
+          path: ${{ github.workspace }}/build/brave-adventurers-alistair-debug.apk
           if-no-files-found: error
           retention-days: 14
