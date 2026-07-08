@@ -55,46 +55,55 @@ jobs:
           export/android/debug_keystore_pass = "android"
           EOF
 
-      - name: Install Godot 4.3 + templates (SEM android/build — gradle=false)
+      - name: Install Godot 4.3 + templates
         run: |
           wget -q "https://github.com/godotengine/godot/releases/download/4.3-stable/Godot_v4.3-stable_linux.x86_64.zip" -O /tmp/godot.zip
           unzip -q /tmp/godot.zip -d /tmp/godot_bin
           chmod +x /tmp/godot_bin/Godot_v4.3-stable_linux.x86_64
           sudo ln -sf /tmp/godot_bin/Godot_v4.3-stable_linux.x86_64 /usr/local/bin/godot
-          # Templates — só os binários, sem android/build
           TEMPLATES_DIR="$HOME/.local/share/godot/export_templates/4.3.stable"
           mkdir -p "$TEMPLATES_DIR"
           wget -q "https://github.com/godotengine/godot/releases/download/4.3-stable/Godot_v4.3-stable_export_templates.tpz" -O /tmp/templates.tpz
           unzip -q /tmp/templates.tpz -d /tmp/tpl
           mv /tmp/tpl/templates/* "$TEMPLATES_DIR/"
-          echo "Templates disponíveis (android):"
-          ls "$TEMPLATES_DIR/" | grep android
-          # NÃO instalar android/build — não necessário com gradle_build=false
-          echo "android/build NÃO instalado (gradle=false)"
+          echo "Templates android: $(ls $TEMPLATES_DIR | grep android)"
 
       - name: Pre-heat projeto
         run: |
           Xvfb :99 -screen 0 1024x768x24 &
           export DISPLAY=:99
           godot --headless --path "$(pwd)" --editor --quit 2>&1 || true
-          echo "Cache: $(ls .godot/ 2>/dev/null | wc -l) itens"
+
+      - name: Diagnostico — listar projeto e preset
+        run: |
+          echo "=== project.godot ==="
+          cat project.godot
+          echo ""
+          echo "=== export_presets.cfg ==="
+          cat export_presets.cfg
+          echo ""
+          echo "=== .godot/imported (amostra) ==="
+          ls .godot/imported/ 2>/dev/null | head -5 || echo "(vazio)"
+          echo ""
+          echo "=== android/ ==="
+          ls -la android/ 2>/dev/null || echo "(sem pasta android/)"
+          echo ""
+          echo "=== godot --version ==="
+          godot --version
+          echo ""
+          echo "=== Templates instalados ==="
+          ls "$HOME/.local/share/godot/export_templates/4.3.stable/" | grep android
 
       - name: Export APK debug
         run: |
           mkdir -p build
           Xvfb :99 -screen 0 1024x768x24 &
           export DISPLAY=:99
-          godot --headless --verbose \
-            --path "$(pwd)" \
-            --export-debug "Android" \
-            "$(pwd)/build/brave-adventurers-alistair-debug.apk" 2>&1 || true
+          # Usar script(1) para capturar output do TTY
+          script -q -c 'godot --headless --verbose --path "'"$(pwd)"'" --export-debug "Android" "'"$(pwd)"'/build/brave-adventurers-alistair-debug.apk"' /dev/null 2>&1 || true
           echo "=== build/ ==="
-          ls -lah build/
-          if [ ! -f "build/brave-adventurers-alistair-debug.apk" ]; then
-            echo "ERRO: APK nao gerado"
-            exit 1
-          fi
-          echo "SUCESSO: $(ls -lh build/brave-adventurers-alistair-debug.apk)"
+          ls -lah build/ 2>/dev/null || echo "(vazia)"
+          [ -f "build/brave-adventurers-alistair-debug.apk" ] || exit 1
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
