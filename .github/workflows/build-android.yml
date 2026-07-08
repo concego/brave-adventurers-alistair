@@ -23,17 +23,11 @@ jobs:
           unzip -q /tmp/cmdtools.zip -d /tmp/ct
           cp -r /tmp/ct/cmdline-tools/. "$SDK_ROOT/cmdline-tools/latest/"
           SDKMGR="$SDK_ROOT/cmdline-tools/latest/bin/sdkmanager"
-          echo "=== sdkmanager ==="
-          "$SDKMGR" --version
           yes | "$SDKMGR" --sdk_root="$SDK_ROOT" --licenses > /dev/null 2>&1 || true
-          "$SDKMGR" --sdk_root="$SDK_ROOT" "build-tools;34.0.0" "platforms;android-34" "ndk;23.2.8568313" 2>&1 | tail -5
+          "$SDKMGR" --sdk_root="$SDK_ROOT" "build-tools;34.0.0" "platforms;android-34" "ndk;23.2.8568313" 2>&1 | tail -3
           echo "ANDROID_SDK_ROOT=$SDK_ROOT" >> $GITHUB_ENV
-          echo "=== SDK após install ==="
-          ls "$SDK_ROOT/"
-          echo "=== build-tools ==="
-          ls "$SDK_ROOT/build-tools/" || echo "ERRO: sem build-tools"
-          echo "=== ndk ==="
-          ls "$SDK_ROOT/ndk/" || echo "ERRO: sem ndk"
+          echo "BT: $(ls $SDK_ROOT/build-tools/)"
+          echo "NDK: $(ls $SDK_ROOT/ndk/)"
 
       - name: Gerar debug.keystore
         run: |
@@ -45,18 +39,31 @@ jobs:
             -dname "CN=Android Debug,O=Android,C=US" 2>&1 | tail -2
           echo "KEYSTORE_PATH=/root/.android/debug.keystore" >> $GITHUB_ENV
 
-      - name: Configurar editor_settings
+      - name: Configurar editor_settings (em /root E em HOME)
         run: |
-          SETTINGS="/root/.config/godot/editor_settings-4.3.tres"
-          sed -i '/export\/android\//d' "$SETTINGS" 2>/dev/null || true
-          if [ ! -f "$SETTINGS" ]; then
-            mkdir -p /root/.config/godot
-            printf '[gd_resource type="EditorSettings" format=3]\n\n[resource]\n' > "$SETTINGS"
+          write_settings() {
+            local dir="$1"
+            mkdir -p "$dir"
+            # Usar os dois nomes possíveis do arquivo
+            for fname in "editor_settings-4.tres" "editor_settings-4.3.tres"; do
+              local f="$dir/$fname"
+              if [ -f "$f" ]; then
+                sed -i '/export\/android\//d' "$f"
+              else
+                printf '[gd_resource type="EditorSettings" format=3]\n\n[resource]\n' > "$f"
+              fi
+              printf 'export/android/android_sdk_path = "/root/android-sdk"\n' >> "$f"
+              printf 'export/android/debug_keystore = "/root/.android/debug.keystore"\n' >> "$f"
+              printf 'export/android/debug_keystore_user = "androiddebugkey"\n' >> "$f"
+              printf 'export/android/debug_keystore_pass = "android"\n' >> "$f"
+              echo "::warning::Escrito: $f"
+            done
+          }
+          write_settings /root/.config/godot
+          # Também escrever em $HOME se diferente de /root
+          if [ "$HOME" != "/root" ]; then
+            write_settings "$HOME/.config/godot"
           fi
-          printf 'export/android/android_sdk_path = "/root/android-sdk"\n' >> "$SETTINGS"
-          printf 'export/android/debug_keystore = "/root/.android/debug.keystore"\n' >> "$SETTINGS"
-          printf 'export/android/debug_keystore_user = "androiddebugkey"\n' >> "$SETTINGS"
-          printf 'export/android/debug_keystore_pass = "android"\n' >> "$SETTINGS"
 
       - name: Injetar keystore no export_presets.cfg
         working-directory: ${{ github.workspace }}
@@ -86,8 +93,8 @@ jobs:
           mkdir -p build
           APK_OUT="$GITHUB_WORKSPACE/build/brave-adventurers-alistair-debug.apk"
 
-          echo "::warning::BT: $(ls $ANDROID_SDK_ROOT/build-tools/ 2>/dev/null | tr '\n' ' ' || echo AUSENTE)"
-          echo "::warning::NDK: $(ls $ANDROID_SDK_ROOT/ndk/ 2>/dev/null | tr '\n' ' ' || echo AUSENTE)"
+          echo "::warning::HOME=$HOME | settings: $(ls /root/.config/godot/ | tr '\n' ' ')"
+          echo "::warning::settings HOME: $(ls $HOME/.config/godot/ 2>/dev/null | tr '\n' ' ')"
 
           godot --headless --verbose --audio-driver Dummy \
             --path "$GITHUB_WORKSPACE" \
