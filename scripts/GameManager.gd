@@ -19,7 +19,7 @@ enum Skill {
 }
 
 const SKILL_NAMES = {
-	Skill.GOLPE_SAGRADO:        "Golpe Sagrado",
+	Skill.GOLPE_SAGRADO:       "Golpe Sagrado",
 	Skill.IMPOSICAO_DE_MAOS:   "Imposição de Mãos",
 	Skill.ESCUDO_DA_FE:        "Escudo da Fé",
 	Skill.JULGAMENTO:          "Julgamento"
@@ -96,3 +96,27 @@ func _julgamento(_target: Node) -> void:
 signal player_heal(amount)
 signal player_shield(duration)
 signal area_damage(amount)
+
+# --- Checkpoint e Respawn ---
+var _active_checkpoint: Node = null
+
+func set_active_checkpoint(cp: Node) -> void:
+	# Desativa o anterior
+	if _active_checkpoint and _active_checkpoint != cp:
+		if _active_checkpoint.has_method("deactivate"):
+			_active_checkpoint.deactivate()
+	_active_checkpoint = cp
+
+func respawn_player() -> void:
+	var player = get_tree().get_first_node_in_group("player")
+	if not player:
+		return
+	if _active_checkpoint and _active_checkpoint.has_method("respawn"):
+		_active_checkpoint.respawn(player)
+	else:
+		# Sem checkpoint: volta ao início da fase
+		player.global_position = Vector2(100, 300)
+		player.velocity        = Vector2.ZERO
+		player.hp              = player.max_hp
+		player.energy          = player.max_energy
+		speak("Recomeçando a fase")

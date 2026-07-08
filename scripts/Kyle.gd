@@ -339,6 +339,8 @@ func restore_energy(amount: float) -> void:
 func _die() -> void:
 	_play_anim("death")
 	emit_signal("player_died")
+	await get_tree().create_timer(1.2).timeout
+	game.respawn_player()
 
 func get_nearest_enemy() -> Node:
 	var enemies = get_tree().get_nodes_in_group("enemies")
@@ -350,3 +352,38 @@ func get_nearest_enemy() -> Node:
 			nearest_dist = d
 			nearest = e
 	return nearest
+
+# --- Status de efeitos ---
+var _status: Dictionary = {}  # ex: {"frozen": 1.0}
+
+func apply_status(status: String, duration: float) -> void:
+	_status[status] = duration
+	match status:
+		"frozen":
+			game.speak("Congelado")
+
+func _process_statuses(delta: float) -> void:
+	var expired = []
+	for s in _status:
+		_status[s] -= delta
+		if _status[s] <= 0:
+			expired.append(s)
+	for s in expired:
+		_status.erase(s)
+		game.speak(s.capitalize() + " acabou")
+
+func has_status(status: String) -> bool:
+	return _status.has(status)
+
+# --- Knockback ---
+func apply_knockback(force: Vector2) -> void:
+	velocity += force
+
+# --- Parry de projéteis ---
+# Chamado pelo Projectile quando está perto o suficiente
+func try_deflect_projectile(proj: Node) -> void:
+	if parry_window and _has_energy(ENERGY_PARRY):
+		if proj.try_deflect(self):
+			_spend_energy(ENERGY_PARRY)
+			_gain_energy(ENERGY_PARRY_BONUS)
+			_register_block_use(3)
