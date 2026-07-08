@@ -1,0 +1,39 @@
+name: Import Music from Drive
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm:
+        description: 'Type YES to import music files from Drive'
+        required: true
+
+jobs:
+  import-music:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install gdown
+        run: pip install gdown
+
+      - name: Download music files from Drive
+        run: |
+          mkdir -p assets/audio/music
+          gdown --id 1wqt_0QNFWEbO48r5IcwT4XOLsKLExQpU -O assets/audio/music/music_vargheim.ogg
+          gdown --id 1zDaH77oAMkbqloWhboUnjFwOfL38gopr -O assets/audio/music/music_menu.ogg
+          gdown --id 1LvZMBBGnfs8I1rvGWE9oRtmog6OKS1Fh -O assets/audio/music/music_chapter.ogg
+          gdown --id 1Ljn5CKYSrA36io10QXEN1UCMClBh_FLi -O assets/audio/music/music_boss.ogg
+          ls -lh assets/audio/music/
+
+      - name: Commit and push
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add assets/audio/music/
+          git commit -m "feat: músicas Kevin MacLeod CC0 via Drive import"
+          git push
