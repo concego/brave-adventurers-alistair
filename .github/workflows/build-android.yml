@@ -32,19 +32,8 @@ jobs:
       - name: Instalar dependências do sistema para Godot headless
         run: |
           sudo apt-get update -qq
-          sudo apt-get install -y \
-            libasound2 \
-            libpulse0 \
-            libgl1-mesa-dri \
-            libgles2-mesa \
-            libx11-6 \
-            libxcursor1 \
-            libxinerama1 \
-            libxrandr2 \
-            libxrender1 \
-            libxi6 \
-            libdbus-1-3 \
-            xvfb \
+          sudo apt-get install -y libasound2 libpulse0 libgl1-mesa-dri libgles2-mesa \
+            libx11-6 libxcursor1 libxinerama1 libxrandr2 libxrender1 libxi6 libdbus-1-3 xvfb \
             2>/dev/null || true
 
       - name: Gerar debug.keystore
@@ -70,27 +59,19 @@ jobs:
 
       - name: Install Godot 4.3 + templates
         run: |
-          # Binário
           wget -q "https://github.com/godotengine/godot/releases/download/4.3-stable/Godot_v4.3-stable_linux.x86_64.zip" -O /tmp/godot.zip
           unzip -q /tmp/godot.zip -d /tmp/godot_bin
           chmod +x /tmp/godot_bin/Godot_v4.3-stable_linux.x86_64
           sudo ln -sf /tmp/godot_bin/Godot_v4.3-stable_linux.x86_64 /usr/local/bin/godot
-          # Testar se o binário carrega
-          echo "=== ldd do godot ==="
-          ldd /tmp/godot_bin/Godot_v4.3-stable_linux.x86_64 | grep "not found" || echo "Todas as libs OK"
-          echo "=== versão ==="
-          godot --version || echo "FALHOU"
-          # Templates
           TEMPLATES_DIR="$HOME/.local/share/godot/export_templates/4.3.stable"
           mkdir -p "$TEMPLATES_DIR"
           wget -q "https://github.com/godotengine/godot/releases/download/4.3-stable/Godot_v4.3-stable_export_templates.tpz" -O /tmp/templates.tpz
           unzip -q /tmp/templates.tpz -d /tmp/tpl
           mv /tmp/tpl/templates/* "$TEMPLATES_DIR/"
-          echo "Templates: $(ls $TEMPLATES_DIR | grep android)"
-          # Android source template no projeto
           mkdir -p android/build
           unzip -q "$TEMPLATES_DIR/android_source.zip" -d android/build
           echo "4.3.stable" > android/.build_version
+          echo "Templates Android: $(ls $TEMPLATES_DIR | grep android)"
 
       - name: Pre-heat projeto
         run: |
@@ -101,19 +82,25 @@ jobs:
 
       - name: Export APK debug
         run: |
-          mkdir -p build
+          mkdir -p build logs
           Xvfb :99 -screen 0 1024x768x24 &
           export DISPLAY=:99
+          # Salvar log em arquivo E mostrar no console
           godot --headless --verbose \
             --path "$(pwd)" \
             --export-debug "Android" \
-            "$(pwd)/build/brave-adventurers-alistair-debug.apk" 2>&1
+            "$(pwd)/build/brave-adventurers-alistair-debug.apk" \
+            > logs/godot_stdout.txt 2> logs/godot_stderr.txt
           EXIT=$?
-          echo "Exit Godot: $EXIT"
+          echo "=== STDOUT ==="
+          cat logs/godot_stdout.txt
+          echo "=== STDERR ==="
+          cat logs/godot_stderr.txt
+          echo "=== Exit: $EXIT ==="
           ls -lah build/
           exit $EXIT
 
-      - name: Upload APK
+      - name: Upload APK (sucesso)
         if: success()
         uses: actions/upload-artifact@v4
         with:
@@ -121,3 +108,12 @@ jobs:
           path: build/brave-adventurers-alistair-debug.apk
           if-no-files-found: error
           retention-days: 14
+
+      - name: Upload logs (sempre)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: godot-logs
+          path: logs/
+          if-no-files-found: ignore
+          retention-days: 3
