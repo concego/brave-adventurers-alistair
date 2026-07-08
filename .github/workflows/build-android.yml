@@ -76,7 +76,6 @@ jobs:
           unzip -q /tmp/godot.zip -d /tmp/godot_bin
           chmod +x "/tmp/godot_bin/Godot_v4.3-stable_linux.x86_64"
           sudo cp "/tmp/godot_bin/Godot_v4.3-stable_linux.x86_64" /usr/local/bin/godot
-
           TEMPLATES_DIR="$HOME/.local/share/godot/export_templates/4.3.stable"
           mkdir -p "$TEMPLATES_DIR"
           wget -q "https://github.com/godotengine/godot/releases/download/4.3-stable/Godot_v4.3-stable_export_templates.tpz" -O /tmp/templates.tpz
@@ -84,36 +83,30 @@ jobs:
           mv /tmp/tpl/templates/* "$TEMPLATES_DIR/"
           echo "Templates android: $(ls $TEMPLATES_DIR | grep android | tr '\n' ' ')"
 
-      - name: Diagnostico - projeto carrega?
+      - name: Diagnostico completo (tudo via annotations)
         working-directory: ${{ github.workspace }}
         run: |
-          echo "=== TESTE: godot --headless --quit (carrega o projeto e sai) ==="
-          # Captura stdout e stderr separados
+          annotate() { while IFS= read -r line; do echo "::warning::DIAG| $line"; done; }
+
+          echo "::warning::=== 1. GODOT VERSION ==="
+          xvfb-run --auto-servernum godot --version 2>&1 | annotate
+
+          echo "::warning::=== 2. GODOT --quit (projeto carrega?) ==="
           xvfb-run --auto-servernum godot --headless \
-            --path "$GITHUB_WORKSPACE" \
-            --quit \
-            1>/tmp/godot_stdout.txt \
-            2>/tmp/godot_stderr.txt || true
+            --path "$GITHUB_WORKSPACE" --quit 2>&1 | annotate || true
 
-          echo "--- STDOUT ---"
-          cat /tmp/godot_stdout.txt || echo "(vazio)"
-          echo "--- STDERR ---"
-          cat /tmp/godot_stderr.txt || echo "(vazio)"
+          echo "::warning::=== 3. FILES em .godot/ antes do import ==="
+          find "$GITHUB_WORKSPACE/.godot/" -type f 2>/dev/null | wc -l | xargs -I{} echo "::warning::DIAG| arquivos pre-import: {}"
 
-          echo "=== TESTE: godot --headless --import ==="
+          echo "::warning::=== 4. IMPORT ==="
           xvfb-run --auto-servernum godot --headless \
-            --path "$GITHUB_WORKSPACE" \
-            --import \
-            1>/tmp/godot_import_out.txt \
-            2>/tmp/godot_import_err.txt || true
+            --path "$GITHUB_WORKSPACE" --import 2>&1 | annotate || true
 
-          echo "--- IMPORT STDOUT ---"
-          cat /tmp/godot_import_out.txt || echo "(vazio)"
-          echo "--- IMPORT STDERR ---"
-          cat /tmp/godot_import_err.txt || echo "(vazio)"
+          echo "::warning::=== 5. FILES em .godot/ depois do import ==="
+          find "$GITHUB_WORKSPACE/.godot/" -type f 2>/dev/null | wc -l | xargs -I{} echo "::warning::DIAG| arquivos pos-import: {}"
 
-          echo "=== Cache .godot/ ==="
-          find "$GITHUB_WORKSPACE/.godot/" -type f 2>/dev/null | wc -l | xargs echo "arquivos:"
+          echo "::warning::=== 6. export_presets.cfg final ==="
+          cat export_presets.cfg | annotate
 
       - name: Export APK debug
         working-directory: ${{ github.workspace }}
@@ -121,18 +114,10 @@ jobs:
           mkdir -p "$GITHUB_WORKSPACE/build"
           APK_OUT="$GITHUB_WORKSPACE/build/brave-adventurers-alistair-debug.apk"
 
-          echo "=== Iniciando export ==="
           xvfb-run --auto-servernum godot --headless --verbose \
             --path "$GITHUB_WORKSPACE" \
             --export-debug "Android" \
-            "$APK_OUT" \
-            1>/tmp/godot_export_out.txt \
-            2>/tmp/godot_export_err.txt || true
-
-          echo "--- EXPORT STDOUT ---"
-          cat /tmp/godot_export_out.txt | while IFS= read -r line; do echo "::warning::OUT: $line"; done
-          echo "--- EXPORT STDERR ---"
-          cat /tmp/godot_export_err.txt | while IFS= read -r line; do echo "::warning::ERR: $line"; done
+            "$APK_OUT" 2>&1 | while IFS= read -r line; do echo "::warning::$line"; done || true
 
           if [ -f "$APK_OUT" ]; then
             echo "::notice::✅ APK GERADO: $(ls -sh $APK_OUT | awk '{print $1}')"
