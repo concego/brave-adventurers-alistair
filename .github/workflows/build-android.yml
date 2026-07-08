@@ -15,15 +15,32 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Diagnostico do container
+        run: |
+          echo "::warning::HOME=$HOME"
+          echo "::warning::USER=$(whoami)"
+          echo "::warning::godot=$(which godot)"
+          echo "::warning::godot version=$(godot --version 2>&1)"
+          echo "::warning::XDG_CONFIG_HOME=$XDG_CONFIG_HOME"
+          echo "::warning::XDG_DATA_HOME=$XDG_DATA_HOME"
+          echo "::warning::/root/.config/godot: $(ls /root/.config/godot/ 2>/dev/null | tr '\n' ' ')"
+          echo "::warning::HOME/.config/godot: $(ls $HOME/.config/godot/ 2>/dev/null | tr '\n' ' ')"
+          echo "::warning::/root/.local/share/godot/export_templates: $(ls /root/.local/share/godot/export_templates/ 2>/dev/null | tr '\n' ' ')"
+
       - name: Setup templates
         run: |
-          mkdir -p ~/.local/share/godot/export_templates/
-          cp -r /root/.local/share/godot/export_templates/4.3.stable \
-             ~/.local/share/godot/export_templates/4.3.stable 2>/dev/null || true
-          # Garantir também em /root (onde o Godot realmente procura)
+          # Copiar templates para AMBOS os locais possíveis
           mkdir -p /root/.local/share/godot/export_templates/
-          ls /root/.local/share/godot/export_templates/ 2>/dev/null || echo "nenhum em /root"
-          echo "Templates HOME: $(ls ~/.local/share/godot/export_templates/4.3.stable 2>/dev/null | grep android | tr '\n' ' ')"
+          mkdir -p $HOME/.local/share/godot/export_templates/
+          # O container já tem os templates em /root
+          ls /root/.local/share/godot/export_templates/ 2>/dev/null || echo "sem templates em /root"
+          # Copiar se HOME != /root
+          if [ "$HOME" != "/root" ]; then
+            cp -r /root/.local/share/godot/export_templates/4.3.stable \
+              $HOME/.local/share/godot/export_templates/ 2>/dev/null || true
+          fi
+          echo "::warning::templates /root: $(ls /root/.local/share/godot/export_templates/4.3.stable/ 2>/dev/null | grep android | tr '\n' ' ')"
+          echo "::warning::templates HOME: $(ls $HOME/.local/share/godot/export_templates/4.3.stable/ 2>/dev/null | grep android | tr '\n' ' ')"
 
       - name: Setup Android SDK
         run: |
@@ -40,36 +57,39 @@ jobs:
           export ANDROID_SDK_ROOT="$SDK_ROOT"
           yes | sdkmanager --licenses > /dev/null 2>&1 || true
           sdkmanager "build-tools;34.0.0" "platforms;android-34" "ndk;23.2.8568313" 2>&1 | tail -3
-          echo "SDK: $SDK_ROOT"
 
       - name: Gerar debug.keystore
         run: |
-          mkdir -p /root/.android
+          mkdir -p /root/.android $HOME/.android
           keytool -genkeypair \
             -keystore /root/.android/debug.keystore \
             -storepass android -alias androiddebugkey -keypass android \
             -keyalg RSA -keysize 2048 -validity 10000 \
             -dname "CN=Android Debug,O=Android,C=US" 2>&1 | tail -2
+          [ "$HOME" != "/root" ] && cp /root/.android/debug.keystore $HOME/.android/ || true
           echo "KEYSTORE_PATH=/root/.android/debug.keystore" >> $GITHUB_ENV
 
-      - name: Configurar editor_settings em /root
+      - name: Configurar editor_settings em TODOS os locais
         run: |
-          # O Godot no container procura em /root/.config/godot/ (usuário root)
-          mkdir -p /root/.config/godot
-          # Verificar se já existe algum arquivo de settings
-          SETTINGS=$(ls /root/.config/godot/editor_settings-*.tres 2>/dev/null | head -1)
-          if [ -z "$SETTINGS" ]; then
-            SETTINGS="/root/.config/godot/editor_settings-4.tres"
-            printf '[gd_resource type="EditorSettings" format=3]\n\n[resource]\n' > "$SETTINGS"
-          fi
-          # Remover e re-adicionar as linhas do Android
-          sed -i '/export\/android\//d' "$SETTINGS"
-          printf 'export/android/android_sdk_path = "%s"\n' "$ANDROID_SDK_ROOT" >> "$SETTINGS"
-          printf 'export/android/debug_keystore = "/root/.android/debug.keystore"\n' >> "$SETTINGS"
-          printf 'export/android/debug_keystore_user = "androiddebugkey"\n' >> "$SETTINGS"
-          printf 'export/android/debug_keystore_pass = "android"\n' >> "$SETTINGS"
-          echo "=== $SETTINGS ==="
-          cat "$SETTINGS"
+          write_settings() {
+            local dir="$1"
+            mkdir -p "$dir"
+            local f="$dir/editor_settings-4.3.tres"
+            # Preservar conteúdo existente e adicionar/atualizar android
+            if [ -f "$f" ]; then
+              sed -i '/export\/android\//d' "$f"
+            else
+              printf '[gd_resource type="EditorSettings" format=3]\n\n[resource]\n' > "$f"
+            fi
+            printf 'export/android/android_sdk_path = "%s"\n' "$ANDROID_SDK_ROOT" >> "$f"
+            printf 'export/android/debug_keystore = "/root/.android/debug.keystore"\n' >> "$f"
+            printf 'export/android/debug_keystore_user = "androiddebugkey"\n' >> "$f"
+            printf 'export/android/debug_keystore_pass = "android"\n' >> "$f"
+            echo "::warning::Escrito $f"
+            cat "$f" | while IFS= read -r l; do echo "::warning::SETTINGS| $l"; done
+          }
+          write_settings /root/.config/godot
+          [ "$HOME" != "/root" ] && write_settings $HOME/.config/godot || true
 
       - name: Injetar keystore no export_presets.cfg
         working-directory: ${{ github.workspace }}
@@ -80,10 +100,9 @@ jobs:
           else
             sed -i "s|keystore/debug=\".*\"|keystore/debug=\"$KEYSTORE_PATH\"|g" export_presets.cfg
           fi
-          echo "=== keystore no preset ==="
-          grep -i keystore export_presets.cfg
+          grep -i keystore export_presets.cfg | while IFS= read -r l; do echo "::warning::PRESET| $l"; done
 
-      - name: Export APK debug
+      - name: Import e Export APK
         working-directory: ${{ github.workspace }}
         env:
           GODOT_ANDROID_KEYSTORE_DEBUG_PATH: /root/.android/debug.keystore
@@ -93,15 +112,16 @@ jobs:
           mkdir -p build
           APK_OUT="$GITHUB_WORKSPACE/build/brave-adventurers-alistair-debug.apk"
 
-          echo "::warning::HOME=$HOME | SDK=$ANDROID_SDK_ROOT | KS=$KEYSTORE_PATH"
-          echo "::warning::editor_settings: $(ls /root/.config/godot/ 2>/dev/null | tr '\n' ' ')"
-          echo "::warning::templates: $(ls /root/.local/share/godot/export_templates/4.3.stable/ 2>/dev/null | grep android | tr '\n' ' ')"
+          echo "::warning::=== IMPORT ==="
+          godot --headless --audio-driver Dummy \
+            --path "$GITHUB_WORKSPACE" --import 2>&1 | \
+            while IFS= read -r l; do echo "::warning::IMP| $l"; done || true
 
-          godot --headless --verbose \
-            --audio-driver Dummy \
+          echo "::warning::=== EXPORT ==="
+          godot --headless --verbose --audio-driver Dummy \
             --path "$GITHUB_WORKSPACE" \
-            --export-debug "Android" \
-            "$APK_OUT" 2>&1 | while IFS= read -r line; do echo "::warning::$line"; done || true
+            --export-debug "Android" "$APK_OUT" 2>&1 | \
+            while IFS= read -r l; do echo "::warning::EXP| $l"; done || true
 
           if [ -f "$APK_OUT" ]; then
             echo "::notice::✅ APK GERADO: $(ls -sh $APK_OUT | awk '{print $1}')"
