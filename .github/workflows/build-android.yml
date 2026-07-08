@@ -42,6 +42,7 @@ jobs:
             -storepass android -alias androiddebugkey -keypass android \
             -keyalg RSA -keysize 2048 -validity 10000 \
             -dname "CN=Android Debug,O=Android,C=US" 2>&1 | tail -2
+          echo "KEYSTORE_PATH=$HOME/.android/debug.keystore" >> $GITHUB_ENV
 
       - name: Configurar Godot editor settings
         run: |
@@ -54,6 +55,18 @@ jobs:
           export/android/debug_keystore_user = "androiddebugkey"
           export/android/debug_keystore_pass = "android"
           EOF
+
+      - name: Injetar keystore path no export_presets.cfg
+        working-directory: ${{ github.workspace }}
+        run: |
+          # Substituir placeholder do keystore com o path real do CI
+          sed -i "s|keystore/debug=\".*\"|keystore/debug=\"$KEYSTORE_PATH\"|g" export_presets.cfg || true
+          # Se não tinha keystore no cfg, adicionar na seção options
+          if ! grep -q "keystore/debug" export_presets.cfg; then
+            sed -i '/\[preset.0.options\]/a keystore/debug="'"$KEYSTORE_PATH"'"\nkeystore/debug_user="androiddebugkey"\nkeystore/debug_password="android"' export_presets.cfg
+          fi
+          echo "export_presets.cfg (keystore section):"
+          grep -i keystore export_presets.cfg || echo "(sem keystore)"
 
       - name: Install Godot 4.3 + templates
         run: |
@@ -68,34 +81,31 @@ jobs:
           mv /tmp/tpl/templates/* "$TEMPLATES_DIR/"
           echo "Templates android: $(ls $TEMPLATES_DIR | grep android)"
 
-      - name: Importar assets do projeto (--import)
+      - name: Importar assets do projeto
         working-directory: ${{ github.workspace }}
         run: |
           Xvfb :99 -screen 0 1024x768x24 &
           export DISPLAY=:99
-          # --import força importação completa dos assets antes de qualquer export
-          # Disponível no Godot 4.2+ como substituto do --editor --quit para CI
-          godot --headless --path "$GITHUB_WORKSPACE" --import 2>&1 | tail -5 || true
-          echo "Importacao concluida. Cache: $(find .godot/ -name '*.ctex' 2>/dev/null | wc -l) texturas"
+          godot --headless --path "$GITHUB_WORKSPACE" --import 2>&1 | tail -3 || true
 
       - name: Export APK debug
         working-directory: ${{ github.workspace }}
         run: |
-          mkdir -p build
+          mkdir -p "$GITHUB_WORKSPACE/build"
           Xvfb :99 -screen 0 1024x768x24 &
           export DISPLAY=:99
+          APK_OUT="$GITHUB_WORKSPACE/build/brave-adventurers-alistair-debug.apk"
           GODOT_OUT=$(godot --headless --verbose \
             --path "$GITHUB_WORKSPACE" \
             --export-debug "Android" \
-            "$GITHUB_WORKSPACE/build/brave-adventurers-alistair-debug.apk" 2>&1 || true)
+            "$APK_OUT" 2>&1 || true)
           echo "$GODOT_OUT" | while IFS= read -r line; do
             echo "::warning::$line"
           done
-          if [ -f "$GITHUB_WORKSPACE/build/brave-adventurers-alistair-debug.apk" ]; then
-            SZ=$(ls -lh "$GITHUB_WORKSPACE/build/brave-adventurers-alistair-debug.apk" | awk '{print $5}')
-            echo "::notice::APK GERADO: $SZ"
+          if [ -f "$APK_OUT" ]; then
+            echo "::notice::APK GERADO: $(ls -lh $APK_OUT | awk '{print $5}')"
           else
-            echo "::error::APK NAO GERADO"
+            echo "::error::APK NAO GERADO — build/ vazia"
             exit 1
           fi
 
