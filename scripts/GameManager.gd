@@ -1,5 +1,5 @@
 # GameManager.gd — Autoload singleton
-# Gerencia estado global: TTS, skills do Kyle, level, HP
+# Gerencia estado global: TTS, skills do Kyle, level, HP, música
 
 extends Node
 
@@ -9,6 +9,59 @@ func speak(text: String) -> void:
 		DisplayServer.tts_speak(text, DisplayServer.tts_get_voices()[0] if DisplayServer.tts_get_voices().size() > 0 else "", 100)
 	else:
 		print("[TTS] " + text)
+
+# --- Música ---
+# music_player toca a trilha da fase atual em loop
+var music_player: AudioStreamPlayer = null
+
+enum MusicTrack { NONE, MENU, GAMEPLAY, BOSS, CHAPTER }
+
+var _current_track: MusicTrack = MusicTrack.NONE
+
+const MUSIC_PATHS = {
+	MusicTrack.MENU:      "res://assets/audio/music/music_menu.ogg",
+	MusicTrack.GAMEPLAY:  "res://assets/audio/music/music_vargheim.ogg",
+	MusicTrack.BOSS:      "res://assets/audio/music/music_boss.ogg",
+	MusicTrack.CHAPTER:   "res://assets/audio/music/music_chapter.ogg",
+}
+
+func _ready() -> void:
+	music_player = AudioStreamPlayer.new()
+	music_player.bus = "Music"
+	add_child(music_player)
+
+func play_music(track: MusicTrack) -> void:
+	if track == _current_track:
+		return
+	_current_track = track
+	if track == MusicTrack.NONE:
+		music_player.stop()
+		return
+	var path = MUSIC_PATHS.get(track, "")
+	if path == "":
+		return
+	var stream = load(path) as AudioStream
+	if not stream:
+		push_warning("GameManager: música não encontrada: " + path)
+		return
+	stream.loop = true
+	music_player.stream = stream
+	music_player.play()
+
+func stop_music() -> void:
+	play_music(MusicTrack.NONE)
+
+# Fade out suave (útil em transições de cena)
+func fade_music(duration: float = 1.0) -> void:
+	if not music_player.playing:
+		return
+	var tween = create_tween()
+	tween.tween_property(music_player, "volume_db", -80.0, duration)
+	tween.tween_callback(func():
+		music_player.stop()
+		music_player.volume_db = 0.0
+		_current_track = MusicTrack.NONE
+	)
 
 # --- Kyle Alistair — Habilidades ---
 enum Skill {
@@ -101,7 +154,6 @@ signal area_damage(amount)
 var _active_checkpoint: Node = null
 
 func set_active_checkpoint(cp: Node) -> void:
-	# Desativa o anterior
 	if _active_checkpoint and _active_checkpoint != cp:
 		if _active_checkpoint.has_method("deactivate"):
 			_active_checkpoint.deactivate()
@@ -114,7 +166,6 @@ func respawn_player() -> void:
 	if _active_checkpoint and _active_checkpoint.has_method("respawn"):
 		_active_checkpoint.respawn(player)
 	else:
-		# Sem checkpoint: volta ao início da fase
 		player.global_position = Vector2(100, 300)
 		player.velocity        = Vector2.ZERO
 		player.hp              = player.max_hp
