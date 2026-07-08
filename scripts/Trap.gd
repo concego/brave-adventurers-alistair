@@ -60,7 +60,7 @@ func _process(delta: float) -> void:
 		_pendulum_angle += pendulum_speed * _pendulum_dir * delta
 		if abs(_pendulum_angle) >= deg_to_rad(60):
 			_pendulum_dir *= -1
-		position.x = _pendulum_range * sin(_pendulum_angle)
+		position.x = pendulum_range * sin(_pendulum_angle)
 
 func _on_body_entered(body: Node) -> void:
 	if not body.has_method("take_damage"):
