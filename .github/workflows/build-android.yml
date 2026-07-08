@@ -50,16 +50,17 @@ jobs:
           mkdir -p android/build
           unzip -q "$TEMPLATES_DIR/android_source.zip" -d android/build
           echo "4.3.stable" > android/.build_version
-          echo "android/build pronto: $(ls android/build | wc -l) itens"
+          echo "android/build: $(ls android/build | wc -l) itens"
 
       - name: Gerar debug.keystore
         run: |
           mkdir -p "$HOME/.android"
-          keytool -genkeypair -v \
+          keytool -genkeypair \
             -keystore "$HOME/.android/debug.keystore" \
             -storepass android -alias androiddebugkey -keypass android \
             -keyalg RSA -keysize 2048 -validity 10000 \
             -dname "CN=Android Debug,O=Android,C=US" 2>&1 | tail -2
+          echo "Keystore: $(ls -lh $HOME/.android/debug.keystore)"
 
       - name: Configurar Godot editor settings
         run: |
@@ -72,30 +73,29 @@ jobs:
           export/android/debug_keystore_user = "androiddebugkey"
           export/android/debug_keystore_pass = "android"
           EOF
+          cat "$HOME/.config/godot/editor_settings-4.tres"
 
       - name: Pre-heat — importar assets
         run: |
-          godot --headless --editor --quit 2>&1 || true
-          echo "Cache: $(ls .godot/ 2>/dev/null | wc -l) itens"
+          PROJECT_PATH="$(pwd)"
+          echo "Projeto em: $PROJECT_PATH"
+          echo "Conteudo:"
+          ls -la
+          godot --headless --path "$PROJECT_PATH" --editor --quit 2>&1 || true
+          echo "Cache .godot/: $(ls .godot/ 2>/dev/null | wc -l) itens"
 
-      - name: Export APK debug (capturando log inline)
+      - name: Export APK debug
         run: |
+          PROJECT_PATH="$(pwd)"
           mkdir -p build
-          echo "====== GODOT EXPORT LOG ======"
-          godot --headless --verbose \
+          echo "Rodando export..."
+          godot --headless --path "$PROJECT_PATH" \
             --export-debug "Android" \
-            "build/brave-adventurers-alistair-debug.apk" 2>&1 || true
-          echo "====== FIM DO LOG ======"
-          echo ""
-          echo "=== Resultado ==="
-          if [ -f "build/brave-adventurers-alistair-debug.apk" ]; then
-            ls -lh build/brave-adventurers-alistair-debug.apk
-            echo "APK GERADO COM SUCESSO"
-          else
-            echo "APK NAO ENCONTRADO"
-            ls -lah build/ 2>/dev/null || echo "(build/ vazia)"
-            exit 1
-          fi
+            "$PROJECT_PATH/build/brave-adventurers-alistair-debug.apk"
+          RESULT=$?
+          echo "Exit code Godot: $RESULT"
+          ls -lah build/ 2>/dev/null || echo "(build/ vazia)"
+          exit $RESULT
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
