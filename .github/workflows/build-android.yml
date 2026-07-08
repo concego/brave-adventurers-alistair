@@ -17,8 +17,6 @@ jobs:
 
       - name: Setup Android SDK
         run: |
-          # No container godot-ci, HOME=/github/home mas user=root
-          # Instalar SDK sempre em /root/android-sdk para consistência
           SDK_ROOT="/root/android-sdk"
           mkdir -p "$SDK_ROOT/cmdline-tools"
           wget -q "https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip" -O /tmp/cmdtools.zip
@@ -27,15 +25,12 @@ jobs:
           export PATH="$PATH:$SDK_ROOT/cmdline-tools/latest/bin"
           export ANDROID_SDK_ROOT="$SDK_ROOT"
           yes | sdkmanager --licenses > /dev/null 2>&1 || true
-          sdkmanager "build-tools;34.0.0" "platforms;android-34" "ndk;23.2.8568313" 2>&1 | tail -5
+          sdkmanager "build-tools;34.0.0" "platforms;android-34" "ndk;23.2.8568313" 2>&1 | tail -3
           echo "ANDROID_SDK_ROOT=$SDK_ROOT" >> $GITHUB_ENV
-          echo "PATH=$PATH:$SDK_ROOT/cmdline-tools/latest/bin" >> $GITHUB_ENV
-          echo "=== SDK estrutura ==="
-          ls "$SDK_ROOT/"
           echo "=== build-tools ==="
-          ls "$SDK_ROOT/build-tools/" 2>/dev/null || echo "ERRO: build-tools nao encontrado"
+          ls "$SDK_ROOT/build-tools/" || echo "ERRO: sem build-tools"
           echo "=== ndk ==="
-          ls "$SDK_ROOT/ndk/" 2>/dev/null || echo "ERRO: ndk nao encontrado"
+          ls "$SDK_ROOT/ndk/" || echo "ERRO: sem ndk"
 
       - name: Gerar debug.keystore
         run: |
@@ -49,10 +44,8 @@ jobs:
 
       - name: Configurar editor_settings
         run: |
-          # Godot lê de /root/.config (user=root, mesmo HOME=/github/home)
           SETTINGS="/root/.config/godot/editor_settings-4.3.tres"
           sed -i '/export\/android\//d' "$SETTINGS" 2>/dev/null || true
-          # Se arquivo não existe, criar do zero
           if [ ! -f "$SETTINGS" ]; then
             mkdir -p /root/.config/godot
             printf '[gd_resource type="EditorSettings" format=3]\n\n[resource]\n' > "$SETTINGS"
@@ -61,7 +54,6 @@ jobs:
           printf 'export/android/debug_keystore = "/root/.android/debug.keystore"\n' >> "$SETTINGS"
           printf 'export/android/debug_keystore_user = "androiddebugkey"\n' >> "$SETTINGS"
           printf 'export/android/debug_keystore_pass = "android"\n' >> "$SETTINGS"
-          echo "=== editor_settings ==="
           cat "$SETTINGS"
 
       - name: Injetar keystore no export_presets.cfg
@@ -83,6 +75,20 @@ jobs:
             while IFS= read -r l; do echo "::warning::IMP| $l"; done || true
           echo "::notice::import: $(find $GITHUB_WORKSPACE/.godot/ -type f 2>/dev/null | wc -l) arquivos"
 
+      - name: Diagnostico - projeto carrega sem erros?
+        working-directory: ${{ github.workspace }}
+        run: |
+          echo "::warning::=== godot --quit (verificar erros de script) ==="
+          godot --headless --audio-driver Dummy \
+            --path "$GITHUB_WORKSPACE" --quit 2>&1 | \
+            while IFS= read -r l; do echo "::warning::QUIT| $l"; done || true
+
+          echo "::warning::=== build-tools dir ==="
+          ls "$ANDROID_SDK_ROOT/build-tools/" 2>&1 | while IFS= read -r l; do echo "::warning::BT| $l"; done
+
+          echo "::warning::=== export_presets final ==="
+          cat export_presets.cfg | while IFS= read -r l; do echo "::warning::CFG| $l"; done
+
       - name: Export APK debug
         working-directory: ${{ github.workspace }}
         env:
@@ -92,9 +98,6 @@ jobs:
         run: |
           mkdir -p build
           APK_OUT="$GITHUB_WORKSPACE/build/brave-adventurers-alistair-debug.apk"
-
-          echo "::warning::SDK=$ANDROID_SDK_ROOT"
-          ls "$ANDROID_SDK_ROOT/build-tools/" 2>/dev/null | while IFS= read -r l; do echo "::warning::BT| $l"; done
 
           godot --headless --verbose --audio-driver Dummy \
             --path "$GITHUB_WORKSPACE" \
