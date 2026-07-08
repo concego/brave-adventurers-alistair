@@ -21,22 +21,19 @@ jobs:
           mkdir -p "$SDK_ROOT/cmdline-tools/latest"
           wget -q "https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip" -O /tmp/cmdtools.zip
           unzip -q /tmp/cmdtools.zip -d /tmp/ct
-          # A estrutura do zip é cmdline-tools/ — mover conteúdo para latest/
           cp -r /tmp/ct/cmdline-tools/. "$SDK_ROOT/cmdline-tools/latest/"
-          export PATH="$PATH:$SDK_ROOT/cmdline-tools/latest/bin"
-          export ANDROID_SDK_ROOT="$SDK_ROOT"
-          echo "=== sdkmanager disponível? ==="
-          which sdkmanager || echo "ERRO: sdkmanager nao encontrado"
-          sdkmanager --version || echo "ERRO: sdkmanager --version falhou"
-          yes | sdkmanager --licenses > /dev/null 2>&1 || true
-          sdkmanager "build-tools;34.0.0" "platforms;android-34" "ndk;23.2.8568313"
+          SDKMGR="$SDK_ROOT/cmdline-tools/latest/bin/sdkmanager"
+          echo "=== sdkmanager ==="
+          "$SDKMGR" --version
+          yes | "$SDKMGR" --sdk_root="$SDK_ROOT" --licenses > /dev/null 2>&1 || true
+          "$SDKMGR" --sdk_root="$SDK_ROOT" "build-tools;34.0.0" "platforms;android-34" "ndk;23.2.8568313" 2>&1 | tail -5
           echo "ANDROID_SDK_ROOT=$SDK_ROOT" >> $GITHUB_ENV
-          echo "=== SDK estrutura após install ==="
-          ls -la "$SDK_ROOT/"
+          echo "=== SDK após install ==="
+          ls "$SDK_ROOT/"
           echo "=== build-tools ==="
-          ls "$SDK_ROOT/build-tools/" || echo "AINDA SEM build-tools"
+          ls "$SDK_ROOT/build-tools/" || echo "ERRO: sem build-tools"
           echo "=== ndk ==="
-          ls "$SDK_ROOT/ndk/" || echo "AINDA SEM ndk"
+          ls "$SDK_ROOT/ndk/" || echo "ERRO: sem ndk"
 
       - name: Gerar debug.keystore
         run: |
@@ -60,7 +57,6 @@ jobs:
           printf 'export/android/debug_keystore = "/root/.android/debug.keystore"\n' >> "$SETTINGS"
           printf 'export/android/debug_keystore_user = "androiddebugkey"\n' >> "$SETTINGS"
           printf 'export/android/debug_keystore_pass = "android"\n' >> "$SETTINGS"
-          cat "$SETTINGS"
 
       - name: Injetar keystore no export_presets.cfg
         working-directory: ${{ github.workspace }}
@@ -71,7 +67,6 @@ jobs:
           else
             sed -i 's|keystore/debug=".*"|keystore/debug="/root/.android/debug.keystore"|g' export_presets.cfg
           fi
-          grep -i keystore export_presets.cfg
 
       - name: Import assets
         working-directory: ${{ github.workspace }}
@@ -91,9 +86,8 @@ jobs:
           mkdir -p build
           APK_OUT="$GITHUB_WORKSPACE/build/brave-adventurers-alistair-debug.apk"
 
-          echo "::warning::SDK estrutura: $(ls $ANDROID_SDK_ROOT/ | tr '\n' ' ')"
-          echo "::warning::build-tools: $(ls $ANDROID_SDK_ROOT/build-tools/ 2>/dev/null | tr '\n' ' ' || echo AUSENTE)"
-          echo "::warning::ndk: $(ls $ANDROID_SDK_ROOT/ndk/ 2>/dev/null | tr '\n' ' ' || echo AUSENTE)"
+          echo "::warning::BT: $(ls $ANDROID_SDK_ROOT/build-tools/ 2>/dev/null | tr '\n' ' ' || echo AUSENTE)"
+          echo "::warning::NDK: $(ls $ANDROID_SDK_ROOT/ndk/ 2>/dev/null | tr '\n' ' ' || echo AUSENTE)"
 
           godot --headless --verbose --audio-driver Dummy \
             --path "$GITHUB_WORKSPACE" \
