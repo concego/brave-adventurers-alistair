@@ -56,18 +56,6 @@ jobs:
           export/android/debug_keystore_pass = "android"
           EOF
 
-      - name: Injetar keystore path no export_presets.cfg
-        working-directory: ${{ github.workspace }}
-        run: |
-          # Substituir placeholder do keystore com o path real do CI
-          sed -i "s|keystore/debug=\".*\"|keystore/debug=\"$KEYSTORE_PATH\"|g" export_presets.cfg || true
-          # Se não tinha keystore no cfg, adicionar na seção options
-          if ! grep -q "keystore/debug" export_presets.cfg; then
-            sed -i '/\[preset.0.options\]/a keystore/debug="'"$KEYSTORE_PATH"'"\nkeystore/debug_user="androiddebugkey"\nkeystore/debug_password="android"' export_presets.cfg
-          fi
-          echo "export_presets.cfg (keystore section):"
-          grep -i keystore export_presets.cfg || echo "(sem keystore)"
-
       - name: Install Godot 4.3 + templates
         run: |
           wget -q "https://github.com/godotengine/godot/releases/download/4.3-stable/Godot_v4.3-stable_linux.x86_64.zip" -O /tmp/godot.zip
@@ -81,31 +69,38 @@ jobs:
           mv /tmp/tpl/templates/* "$TEMPLATES_DIR/"
           echo "Templates android: $(ls $TEMPLATES_DIR | grep android)"
 
-      - name: Importar assets do projeto
+      - name: Preparar diretório build (OBRIGATÓRIO antes do export)
+        # Doc Godot 4.3: "The target directory should exist"
         working-directory: ${{ github.workspace }}
         run: |
-          Xvfb :99 -screen 0 1024x768x24 &
-          export DISPLAY=:99
-          godot --headless --path "$GITHUB_WORKSPACE" --import 2>&1 | tail -3 || true
+          mkdir -p build
+          echo "build/ criado em: $(pwd)/build"
 
       - name: Export APK debug
+        # Rodar COM working-directory = projeto, SEM --path
+        # A doc oficial usa: godot --headless --export-debug "Android" /caminho/saida.apk
+        # O Godot usa o CWD como diretório do projeto
         working-directory: ${{ github.workspace }}
         run: |
-          mkdir -p "$GITHUB_WORKSPACE/build"
           Xvfb :99 -screen 0 1024x768x24 &
           export DISPLAY=:99
           APK_OUT="$GITHUB_WORKSPACE/build/brave-adventurers-alistair-debug.apk"
+          echo "::notice::CWD: $(pwd)"
+          echo "::notice::project.godot: $(ls project.godot)"
+          echo "::notice::export_presets: $(head -2 export_presets.cfg)"
+          echo "::notice::Templates: $(ls $HOME/.local/share/godot/export_templates/4.3.stable/ | grep android)"
+          echo "::notice::APK destino: $APK_OUT"
+          # Sem --path, CWD é o projeto. --import está implícito no --export-debug (doc 4.3)
           GODOT_OUT=$(godot --headless --verbose \
-            --path "$GITHUB_WORKSPACE" \
             --export-debug "Android" \
             "$APK_OUT" 2>&1 || true)
           echo "$GODOT_OUT" | while IFS= read -r line; do
             echo "::warning::$line"
           done
           if [ -f "$APK_OUT" ]; then
-            echo "::notice::APK GERADO: $(ls -lh $APK_OUT | awk '{print $5}')"
+            echo "::notice::✅ APK GERADO: $(ls -lh $APK_OUT | awk '{print $5}')"
           else
-            echo "::error::APK NAO GERADO — build/ vazia"
+            echo "::error::❌ APK NAO GERADO — build/ contents: $(ls build/ 2>/dev/null || echo vazia)"
             exit 1
           fi
 
