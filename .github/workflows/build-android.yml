@@ -30,8 +30,11 @@ jobs:
       - name: Instalar dependências do sistema
         run: |
           sudo apt-get update -qq
-          sudo apt-get install -y libasound2 libpulse0 libgl1-mesa-dri libgles2-mesa \
-            libx11-6 libxcursor1 libxinerama1 libxrandr2 libxrender1 libxi6 libdbus-1-3 xvfb \
+          sudo apt-get install -y \
+            libasound2 libpulse0 \
+            libgl1-mesa-dri libgles2-mesa \
+            libx11-6 libxcursor1 libxinerama1 libxrandr2 libxrender1 libxi6 \
+            libdbus-1-3 xvfb \
             2>/dev/null || true
 
       - name: Gerar debug.keystore
@@ -47,33 +50,32 @@ jobs:
       - name: Configurar Godot editor settings
         run: |
           mkdir -p "$HOME/.config/godot"
-          cat > "$HOME/.config/godot/editor_settings-4.tres" << EOF
+          cat > "$HOME/.config/godot/editor_settings-4.tres" << EOSETTINGS
           [gd_resource type="EditorSettings" format=3]
           [resource]
           export/android/android_sdk_path = "$ANDROID_SDK_ROOT"
           export/android/debug_keystore = "$HOME/.android/debug.keystore"
           export/android/debug_keystore_user = "androiddebugkey"
           export/android/debug_keystore_pass = "android"
-          EOF
+          EOSETTINGS
 
-      - name: Injetar keystore path no export_presets.cfg
+      - name: Injetar keystore no export_presets.cfg
         working-directory: ${{ github.workspace }}
         run: |
           if grep -q "keystore/debug" export_presets.cfg; then
             sed -i "s|keystore/debug=\".*\"|keystore/debug=\"$KEYSTORE_PATH\"|g" export_presets.cfg
           else
-            sed -i '/\[preset.0.options\]/a keystore/debug="'"$KEYSTORE_PATH"'"\nkeystore/debug_user="androiddebugkey"\nkeystore/debug_password="android"' export_presets.cfg
+            printf '\nkeystore/debug="%s"\nkeystore/debug_user="androiddebugkey"\nkeystore/debug_password="android"\n' \
+              "$KEYSTORE_PATH" >> export_presets.cfg
           fi
-          echo "--- keystore no preset ---"
-          grep -i keystore export_presets.cfg || echo "(nenhum)"
+          grep -i keystore export_presets.cfg
 
-      - name: Install Godot 4.3 headless + templates
+      - name: Install Godot 4.3 + templates
         run: |
-          # Usar o binário HEADLESS dedicado (sem dependência de display)
           wget -q "https://github.com/godotengine/godot/releases/download/4.3-stable/Godot_v4.3-stable_linux.x86_64.zip" -O /tmp/godot.zip
           unzip -q /tmp/godot.zip -d /tmp/godot_bin
           chmod +x "/tmp/godot_bin/Godot_v4.3-stable_linux.x86_64"
-          sudo ln -sf "/tmp/godot_bin/Godot_v4.3-stable_linux.x86_64" /usr/local/bin/godot
+          sudo cp "/tmp/godot_bin/Godot_v4.3-stable_linux.x86_64" /usr/local/bin/godot
 
           TEMPLATES_DIR="$HOME/.local/share/godot/export_templates/4.3.stable"
           mkdir -p "$TEMPLATES_DIR"
@@ -81,50 +83,41 @@ jobs:
           unzip -q /tmp/templates.tpz -d /tmp/tpl
           mv /tmp/tpl/templates/* "$TEMPLATES_DIR/"
 
-          echo "--- Diagnóstico do binário ---"
-          godot --version
-          echo "--- Flags de export disponíveis ---"
-          godot --help 2>&1 | grep -i "export" || true
-          echo "--- Templates Android instalados ---"
+          echo "=== godot --version ==="
+          xvfb-run --auto-servernum godot --version
+          echo "=== templates android ==="
           ls "$TEMPLATES_DIR" | grep android
 
-      - name: Importar assets do projeto
+      - name: Importar assets (xvfb-run)
         working-directory: ${{ github.workspace }}
         run: |
-          echo "--- Rodando --import ---"
-          # --import já implica headless internamente no Godot 4.3
-          godot --headless --path "$GITHUB_WORKSPACE" --import 2>&1 || true
-          echo "--- Cache gerado ---"
-          find .godot/ -name "*.ctex" 2>/dev/null | wc -l | xargs echo "texturas importadas:"
-          find .godot/ -name "*.res"  2>/dev/null | wc -l | xargs echo "recursos importados:"
+          echo "=== Importando assets ==="
+          xvfb-run --auto-servernum godot --headless \
+            --path "$GITHUB_WORKSPACE" \
+            --import 2>&1 || true
+          echo "=== Cache .godot ==="
+          find .godot/ -type f 2>/dev/null | wc -l | xargs echo "arquivos importados:"
 
-      - name: Export APK debug
+      - name: Export APK debug (xvfb-run)
         working-directory: ${{ github.workspace }}
         run: |
           mkdir -p "$GITHUB_WORKSPACE/build"
           APK_OUT="$GITHUB_WORKSPACE/build/brave-adventurers-alistair-debug.apk"
 
-          echo "--- Iniciando export ---"
-          # Sintaxe oficial doc Godot 4.3:
-          # godot --headless --export-debug "PresetName" /absolute/path/to/output.apk
-          GODOT_OUT=$(godot --headless --verbose \
+          echo "=== Iniciando export ==="
+          xvfb-run --auto-servernum godot --headless --verbose \
             --path "$GITHUB_WORKSPACE" \
             --export-debug "Android" \
-            "$APK_OUT" 2>&1 || true)
+            "$APK_OUT" 2>&1 | while IFS= read -r line; do
+              echo "::warning::$line"
+            done || true
 
-          echo "$GODOT_OUT" | while IFS= read -r line; do
-            echo "::warning::$line"
-          done
-
-          echo "--- Verificando APK ---"
+          echo "=== Verificando APK ==="
           if [ -f "$APK_OUT" ]; then
-            echo "::notice::✅ APK GERADO: $(ls -lh $APK_OUT | awk '{print $5}')"
+            echo "::notice::✅ APK GERADO: $(ls -sh $APK_OUT | awk '{print $1}')"
           else
             echo "::error::❌ APK NAO GERADO"
-            echo "--- Conteúdo de build/ ---"
-            ls -la "$GITHUB_WORKSPACE/build/" || echo "(vazio)"
-            echo "--- Conteúdo de .godot/ ---"
-            ls -la "$GITHUB_WORKSPACE/.godot/" || echo "(inexistente)"
+            ls -la "$GITHUB_WORKSPACE/build/" || true
             exit 1
           fi
 
