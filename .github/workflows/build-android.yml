@@ -18,19 +18,18 @@ jobs:
       - name: Setup templates
         run: |
           mkdir -p ~/.local/share/godot/export_templates/
-          mv /root/.local/share/godot/export_templates/4.3.stable \
-             ~/.local/share/godot/export_templates/4.3.stable 2>/dev/null || \
           cp -r /root/.local/share/godot/export_templates/4.3.stable \
              ~/.local/share/godot/export_templates/4.3.stable 2>/dev/null || true
-          mkdir -p ~/.config/
-          cp -r /root/.config/godot ~/.config/godot 2>/dev/null || true
-          echo "Templates: $(ls ~/.local/share/godot/export_templates/4.3.stable | grep android | tr '\n' ' ')"
+          # Garantir também em /root (onde o Godot realmente procura)
+          mkdir -p /root/.local/share/godot/export_templates/
+          ls /root/.local/share/godot/export_templates/ 2>/dev/null || echo "nenhum em /root"
+          echo "Templates HOME: $(ls ~/.local/share/godot/export_templates/4.3.stable 2>/dev/null | grep android | tr '\n' ' ')"
 
       - name: Setup Android SDK
         run: |
           SDK_ROOT="/usr/local/lib/android/sdk"
           if [ ! -d "$SDK_ROOT" ]; then
-            SDK_ROOT="$HOME/android-sdk"
+            SDK_ROOT="/root/android-sdk"
             wget -q "https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip" -O /tmp/cmdtools.zip
             mkdir -p "$SDK_ROOT/cmdline-tools"
             unzip -q /tmp/cmdtools.zip -d /tmp/ct
@@ -45,34 +44,32 @@ jobs:
 
       - name: Gerar debug.keystore
         run: |
-          apt-get install -y -qq default-jdk-headless 2>/dev/null || true
-          mkdir -p "$HOME/.android"
+          mkdir -p /root/.android
           keytool -genkeypair \
-            -keystore "$HOME/.android/debug.keystore" \
+            -keystore /root/.android/debug.keystore \
             -storepass android -alias androiddebugkey -keypass android \
             -keyalg RSA -keysize 2048 -validity 10000 \
             -dname "CN=Android Debug,O=Android,C=US" 2>&1 | tail -2
-          echo "KEYSTORE_PATH=$HOME/.android/debug.keystore" >> $GITHUB_ENV
+          echo "KEYSTORE_PATH=/root/.android/debug.keystore" >> $GITHUB_ENV
 
-      - name: Configurar editor_settings com SDK (shell puro)
+      - name: Configurar editor_settings em /root
         run: |
-          SETTINGS_FILE=$(ls ~/.config/godot/editor_settings-*.tres 2>/dev/null | head -1)
-          if [ -z "$SETTINGS_FILE" ]; then
-            SETTINGS_FILE="$HOME/.config/godot/editor_settings-4.tres"
-            mkdir -p "$HOME/.config/godot"
-            printf '[gd_resource type="EditorSettings" format=3]\n\n[resource]\n' > "$SETTINGS_FILE"
+          # O Godot no container procura em /root/.config/godot/ (usuário root)
+          mkdir -p /root/.config/godot
+          # Verificar se já existe algum arquivo de settings
+          SETTINGS=$(ls /root/.config/godot/editor_settings-*.tres 2>/dev/null | head -1)
+          if [ -z "$SETTINGS" ]; then
+            SETTINGS="/root/.config/godot/editor_settings-4.tres"
+            printf '[gd_resource type="EditorSettings" format=3]\n\n[resource]\n' > "$SETTINGS"
           fi
-          # Remover linhas existentes e re-adicionar
-          sed -i '/export\/android\/android_sdk_path/d' "$SETTINGS_FILE"
-          sed -i '/export\/android\/debug_keystore/d' "$SETTINGS_FILE"
-          sed -i '/export\/android\/java_sdk_path/d' "$SETTINGS_FILE"
-          printf 'export/android/android_sdk_path = "%s"\n' "$ANDROID_SDK_ROOT" >> "$SETTINGS_FILE"
-          printf 'export/android/debug_keystore = "%s/.android/debug.keystore"\n' "$HOME" >> "$SETTINGS_FILE"
-          printf 'export/android/debug_keystore_user = "androiddebugkey"\n' >> "$SETTINGS_FILE"
-          printf 'export/android/debug_keystore_pass = "android"\n' >> "$SETTINGS_FILE"
-          printf 'export/android/java_sdk_path = "/usr/lib/jvm/java-17-openjdk-amd64"\n' >> "$SETTINGS_FILE"
-          echo "=== $SETTINGS_FILE ==="
-          cat "$SETTINGS_FILE"
+          # Remover e re-adicionar as linhas do Android
+          sed -i '/export\/android\//d' "$SETTINGS"
+          printf 'export/android/android_sdk_path = "%s"\n' "$ANDROID_SDK_ROOT" >> "$SETTINGS"
+          printf 'export/android/debug_keystore = "/root/.android/debug.keystore"\n' >> "$SETTINGS"
+          printf 'export/android/debug_keystore_user = "androiddebugkey"\n' >> "$SETTINGS"
+          printf 'export/android/debug_keystore_pass = "android"\n' >> "$SETTINGS"
+          echo "=== $SETTINGS ==="
+          cat "$SETTINGS"
 
       - name: Injetar keystore no export_presets.cfg
         working-directory: ${{ github.workspace }}
@@ -83,20 +80,22 @@ jobs:
           else
             sed -i "s|keystore/debug=\".*\"|keystore/debug=\"$KEYSTORE_PATH\"|g" export_presets.cfg
           fi
-          echo "=== keystore ==="
+          echo "=== keystore no preset ==="
           grep -i keystore export_presets.cfg
 
       - name: Export APK debug
         working-directory: ${{ github.workspace }}
         env:
-          GODOT_ANDROID_KEYSTORE_DEBUG_PATH: ${{ env.KEYSTORE_PATH }}
+          GODOT_ANDROID_KEYSTORE_DEBUG_PATH: /root/.android/debug.keystore
           GODOT_ANDROID_KEYSTORE_DEBUG_USER: androiddebugkey
           GODOT_ANDROID_KEYSTORE_DEBUG_PASSWORD: android
         run: |
           mkdir -p build
           APK_OUT="$GITHUB_WORKSPACE/build/brave-adventurers-alistair-debug.apk"
 
-          echo "::warning::SDK=$ANDROID_SDK_ROOT | KS=$KEYSTORE_PATH"
+          echo "::warning::HOME=$HOME | SDK=$ANDROID_SDK_ROOT | KS=$KEYSTORE_PATH"
+          echo "::warning::editor_settings: $(ls /root/.config/godot/ 2>/dev/null | tr '\n' ' ')"
+          echo "::warning::templates: $(ls /root/.local/share/godot/export_templates/4.3.stable/ 2>/dev/null | grep android | tr '\n' ' ')"
 
           godot --headless --verbose \
             --audio-driver Dummy \
