@@ -67,47 +67,53 @@ jobs:
           wget -q "https://github.com/godotengine/godot/releases/download/4.3-stable/Godot_v4.3-stable_export_templates.tpz" -O /tmp/templates.tpz
           unzip -q /tmp/templates.tpz -d /tmp/tpl
           mv /tmp/tpl/templates/* "$TEMPLATES_DIR/"
-          echo "Templates android: $(ls $TEMPLATES_DIR | grep android)"
+          echo "Templates: $(ls $TEMPLATES_DIR | grep android)"
 
-      - name: Preparar diretório build (OBRIGATÓRIO antes do export)
-        # Doc Godot 4.3: "The target directory should exist"
+      - name: Export APK debug
         working-directory: ${{ github.workspace }}
         run: |
           mkdir -p build
-          echo "build/ criado em: $(pwd)/build"
-
-      - name: Export APK debug
-        # Rodar COM working-directory = projeto, SEM --path
-        # A doc oficial usa: godot --headless --export-debug "Android" /caminho/saida.apk
-        # O Godot usa o CWD como diretório do projeto
-        working-directory: ${{ github.workspace }}
-        run: |
           Xvfb :99 -screen 0 1024x768x24 &
           export DISPLAY=:99
           APK_OUT="$GITHUB_WORKSPACE/build/brave-adventurers-alistair-debug.apk"
-          echo "::notice::CWD: $(pwd)"
-          echo "::notice::project.godot: $(ls project.godot)"
-          echo "::notice::export_presets: $(head -2 export_presets.cfg)"
-          echo "::notice::Templates: $(ls $HOME/.local/share/godot/export_templates/4.3.stable/ | grep android)"
-          echo "::notice::APK destino: $APK_OUT"
-          # Sem --path, CWD é o projeto. --import está implícito no --export-debug (doc 4.3)
-          GODOT_OUT=$(godot --headless --verbose \
+          LOGFILE="$GITHUB_WORKSPACE/build/godot.log"
+          echo "--- EXPORT START ---" > "$LOGFILE"
+          # Redirecionar diretamente para arquivo sem captura em variável
+          godot --headless --verbose \
             --export-debug "Android" \
-            "$APK_OUT" 2>&1 || true)
-          echo "$GODOT_OUT" | while IFS= read -r line; do
+            "$APK_OUT" \
+            >> "$LOGFILE" 2>&1 || true
+          echo "--- EXPORT END exit=$? ---" >> "$LOGFILE"
+          # Mostrar log completo via annotations
+          echo "::group::Godot Export Log"
+          cat "$LOGFILE"
+          echo "::endgroup::"
+          # Mostrar últimas linhas como warning para aparecer nas annotations
+          tail -30 "$LOGFILE" | while IFS= read -r line; do
             echo "::warning::$line"
           done
+          # Checar APK
           if [ -f "$APK_OUT" ]; then
-            echo "::notice::✅ APK GERADO: $(ls -lh $APK_OUT | awk '{print $5}')"
+            echo "::notice::✅ APK: $(ls -lh $APK_OUT | awk '{print $5}')"
           else
-            echo "::error::❌ APK NAO GERADO — build/ contents: $(ls build/ 2>/dev/null || echo vazia)"
+            echo "::error::❌ APK NAO GERADO"
             exit 1
           fi
 
       - name: Upload APK
+        if: success()
         uses: actions/upload-artifact@v4
         with:
           name: brave-adventurers-alistair-debug
           path: ${{ github.workspace }}/build/brave-adventurers-alistair-debug.apk
           if-no-files-found: error
           retention-days: 14
+
+      - name: Upload log (sempre)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: godot-export-log
+          path: ${{ github.workspace }}/build/godot.log
+          if-no-files-found: ignore
+          retention-days: 3
