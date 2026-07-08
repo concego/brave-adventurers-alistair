@@ -67,17 +67,16 @@ jobs:
           unzip -q /tmp/templates.tpz -d /tmp/tpl
           mv /tmp/tpl/templates/* "$TEMPLATES_DIR/"
           echo "Templates android: $(ls $TEMPLATES_DIR | grep android)"
-          echo "TEMPLATES_DIR=$TEMPLATES_DIR" >> $GITHUB_ENV
 
-      - name: Pre-heat projeto
+      - name: Importar assets do projeto (--import)
         working-directory: ${{ github.workspace }}
         run: |
           Xvfb :99 -screen 0 1024x768x24 &
           export DISPLAY=:99
-          echo "Projeto em: $GITHUB_WORKSPACE"
-          ls "$GITHUB_WORKSPACE/project.godot"
-          godot --headless --path "$GITHUB_WORKSPACE" --editor --quit 2>&1 || true
-          echo "Cache: $(ls .godot/ 2>/dev/null | wc -l) itens"
+          # --import força importação completa dos assets antes de qualquer export
+          # Disponível no Godot 4.2+ como substituto do --editor --quit para CI
+          godot --headless --path "$GITHUB_WORKSPACE" --import 2>&1 | tail -5 || true
+          echo "Importacao concluida. Cache: $(find .godot/ -name '*.ctex' 2>/dev/null | wc -l) texturas"
 
       - name: Export APK debug
         working-directory: ${{ github.workspace }}
@@ -85,18 +84,16 @@ jobs:
           mkdir -p build
           Xvfb :99 -screen 0 1024x768x24 &
           export DISPLAY=:99
-          echo "::notice::Projeto: $GITHUB_WORKSPACE"
-          echo "::notice::project.godot: $(ls -la $GITHUB_WORKSPACE/project.godot)"
-          echo "::notice::export_presets: $(head -3 $GITHUB_WORKSPACE/export_presets.cfg)"
           GODOT_OUT=$(godot --headless --verbose \
             --path "$GITHUB_WORKSPACE" \
             --export-debug "Android" \
             "$GITHUB_WORKSPACE/build/brave-adventurers-alistair-debug.apk" 2>&1 || true)
-          echo "$GODOT_OUT" | head -80 | while IFS= read -r line; do
+          echo "$GODOT_OUT" | while IFS= read -r line; do
             echo "::warning::$line"
           done
           if [ -f "$GITHUB_WORKSPACE/build/brave-adventurers-alistair-debug.apk" ]; then
-            echo "::notice::APK GERADO OK"
+            SZ=$(ls -lh "$GITHUB_WORKSPACE/build/brave-adventurers-alistair-debug.apk" | awk '{print $5}')
+            echo "::notice::APK GERADO: $SZ"
           else
             echo "::error::APK NAO GERADO"
             exit 1
