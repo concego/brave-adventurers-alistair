@@ -54,22 +54,25 @@ jobs:
           mv /tmp/tpl/templates/* "$TEMPLATES_DIR/"
           rm -f "Godot_v${GODOT_VERSION}-stable_export_templates.tpz"
 
-      - name: Configurar editor settings
+      - name: Configurar editor settings (TODOS os arquivos possiveis)
         run: |
-          echo "::warning::HOME=$HOME USER=$(whoami)"
-          SETTINGS_FILE="$HOME/.config/godot/editor_settings-4.tres"
-          mkdir -p "$(dirname $SETTINGS_FILE)"
-          touch "$SETTINGS_FILE"
-          grep -q "gd_resource" "$SETTINGS_FILE" || \
-            printf '[gd_resource type="EditorSettings" format=3]\n\n[resource]\n' > "$SETTINGS_FILE"
-          sed -i '/export\/android/d' "$SETTINGS_FILE"
-          printf 'export/android/android_sdk_path = "%s"\n' "$ANDROID_SDK_ROOT" >> "$SETTINGS_FILE"
-          printf 'export/android/debug_keystore = "%s"\n' "$KEYSTORE_PATH" >> "$SETTINGS_FILE"
-          printf 'export/android/debug_keystore_user = "androiddebugkey"\n' >> "$SETTINGS_FILE"
-          printf 'export/android/debug_keystore_pass = "android"\n' >> "$SETTINGS_FILE"
-          echo "::warning::SETTINGS_FILE=$SETTINGS_FILE"
-          echo "::warning::SDK_PATH=$ANDROID_SDK_ROOT"
-          cat "$SETTINGS_FILE" | while IFS= read -r l; do echo "::warning::SET| $l"; done
+          mkdir -p "$HOME/.config/godot"
+          write_settings() {
+            local f="$1"
+            touch "$f"
+            grep -q "gd_resource" "$f" || \
+              printf '[gd_resource type="EditorSettings" format=3]\n\n[resource]\n' > "$f"
+            sed -i '/export\/android/d' "$f"
+            printf 'export/android/android_sdk_path = "%s"\n' "$ANDROID_SDK_ROOT" >> "$f"
+            printf 'export/android/debug_keystore = "%s"\n' "$KEYSTORE_PATH" >> "$f"
+            printf 'export/android/debug_keystore_user = "androiddebugkey"\n' >> "$f"
+            printf 'export/android/debug_keystore_pass = "android"\n' >> "$f"
+            echo "::warning::Configurado: $f"
+          }
+          # Escrever em TODOS os nomes possíveis de arquivo
+          write_settings "$HOME/.config/godot/editor_settings-4.tres"
+          write_settings "$HOME/.config/godot/editor_settings-4.3.tres"
+          echo "::warning::Arquivos em ~/.config/godot/: $(ls $HOME/.config/godot/)"
 
       - name: Instalar android build template
         working-directory: ${{ github.workspace }}
@@ -103,8 +106,7 @@ jobs:
         run: |
           mkdir -p build
           APK_OUT="$GITHUB_WORKSPACE/build/${EXPORT_NAME}-debug.apk"
-          echo "::warning::HOME=$HOME | SETTINGS=$(ls $HOME/.config/godot/)"
-          echo "::warning::SDK=$ANDROID_SDK_ROOT BT=$(ls $ANDROID_SDK_ROOT/build-tools/ | head -1)"
+          echo "::warning::settings em uso: $(ls $HOME/.config/godot/)"
           godot --headless --verbose --audio-driver Dummy \
             --path "$GITHUB_WORKSPACE" \
             --export-debug "Android" "$APK_OUT" 2>&1 | \
