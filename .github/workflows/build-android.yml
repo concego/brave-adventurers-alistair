@@ -15,6 +15,12 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Instalar Xvfb e dependências de display
+        run: |
+          apt-get update -qq
+          apt-get install -y -qq xvfb libx11-6 libxcursor1 libxinerama1 libxrandr2 \
+            libxi6 libgles2-mesa libasound2 2>/dev/null || true
+
       - name: Setup Android SDK
         run: |
           SDK_ROOT="/root/android-sdk"
@@ -37,11 +43,10 @@ jobs:
             -dname "CN=Android Debug,O=Android,C=US" 2>&1 | tail -2
           echo "KEYSTORE_PATH=/root/.android/debug.keystore" >> $GITHUB_ENV
 
-      - name: Configurar editor_settings (4 locais)
+      - name: Configurar editor_settings
         run: |
           write_s() {
-            local f="$1"
-            mkdir -p "$(dirname $f)"
+            local f="$1"; mkdir -p "$(dirname $f)"
             if [ -f "$f" ]; then sed -i '/export\/android\//d' "$f"; fi
             grep -q "gd_resource" "$f" 2>/dev/null || \
               printf '[gd_resource type="EditorSettings" format=3]\n\n[resource]\n' > "$f"
@@ -65,18 +70,7 @@ jobs:
             sed -i 's|keystore/debug=".*"|keystore/debug="/root/.android/debug.keystore"|g' export_presets.cfg
           fi
 
-      - name: Import assets
-        working-directory: ${{ github.workspace }}
-        env:
-          ANDROID_SDK_ROOT: /root/android-sdk
-          ANDROID_HOME: /root/android-sdk
-        run: |
-          godot --headless --audio-driver Dummy \
-            --path "$GITHUB_WORKSPACE" --import 2>&1 | \
-            while IFS= read -r l; do echo "::warning::IMP| $l"; done || true
-          echo "::notice::import: $(find $GITHUB_WORKSPACE/.godot/ -type f 2>/dev/null | wc -l) arquivos"
-
-      - name: Export APK debug
+      - name: Import e Export APK (com Xvfb, SEM --headless)
         working-directory: ${{ github.workspace }}
         env:
           ANDROID_SDK_ROOT: /root/android-sdk
@@ -88,19 +82,25 @@ jobs:
           mkdir -p build
           APK_OUT="$GITHUB_WORKSPACE/build/brave-adventurers-alistair-debug.apk"
 
-          # Tentar com xvfb-run se disponível, senão direto
-          if command -v xvfb-run >/dev/null 2>&1; then
-            RUNNER="xvfb-run --auto-servernum"
-            echo "::warning::Usando xvfb-run"
-          else
-            RUNNER=""
-            echo "::warning::Sem xvfb-run, usando headless direto"
-          fi
+          echo "::warning::=== IMPORT (sem headless) ==="
+          Xvfb :99 -screen 0 1280x720x24 &
+          XVFB_PID=$!
+          sleep 2
+          export DISPLAY=:99
 
-          $RUNNER godot --headless --verbose --audio-driver Dummy \
+          DISPLAY=:99 godot --verbose --audio-driver Dummy \
+            --path "$GITHUB_WORKSPACE" --import 2>&1 | \
+            while IFS= read -r l; do echo "::warning::IMP| $l"; done || true
+
+          echo "::notice::import: $(find $GITHUB_WORKSPACE/.godot/ -type f 2>/dev/null | wc -l) arquivos"
+
+          echo "::warning::=== EXPORT (sem headless) ==="
+          DISPLAY=:99 godot --verbose --audio-driver Dummy \
             --path "$GITHUB_WORKSPACE" \
             --export-debug "Android" "$APK_OUT" 2>&1 | \
             while IFS= read -r l; do echo "::warning::EXP| $l"; done || true
+
+          kill $XVFB_PID 2>/dev/null || true
 
           if [ -f "$APK_OUT" ]; then
             echo "::notice::✅ APK GERADO: $(ls -sh $APK_OUT | awk '{print $1}')"
