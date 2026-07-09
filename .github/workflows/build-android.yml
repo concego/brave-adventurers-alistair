@@ -38,6 +38,7 @@ jobs:
             -storepass android -alias androiddebugkey -keypass android \
             -keyalg RSA -keysize 2048 -validity 10000 \
             -dname "CN=Android Debug,O=Android,C=US" 2>&1 | tail -2
+          echo "KEYSTORE_PATH=$HOME/.android/debug.keystore" >> $GITHUB_ENV
 
       - name: Download Godot + templates
         run: |
@@ -55,19 +56,22 @@ jobs:
 
       - name: Configurar editor settings
         run: |
-          mkdir -p "$HOME/.config/godot"
+          echo "::warning::HOME=$HOME USER=$(whoami)"
           SETTINGS_FILE="$HOME/.config/godot/editor_settings-4.tres"
+          mkdir -p "$(dirname $SETTINGS_FILE)"
           touch "$SETTINGS_FILE"
           grep -q "gd_resource" "$SETTINGS_FILE" || \
             printf '[gd_resource type="EditorSettings" format=3]\n\n[resource]\n' > "$SETTINGS_FILE"
           sed -i '/export\/android/d' "$SETTINGS_FILE"
-          printf 'export/android/android_sdk_path = "/usr/local/lib/android/sdk"\n' >> "$SETTINGS_FILE"
-          printf 'export/android/shutdown_adb_on_exit = true\n' >> "$SETTINGS_FILE"
-          printf 'export/android/debug_keystore = "%s/.android/debug.keystore"\n' "$HOME" >> "$SETTINGS_FILE"
+          printf 'export/android/android_sdk_path = "%s"\n' "$ANDROID_SDK_ROOT" >> "$SETTINGS_FILE"
+          printf 'export/android/debug_keystore = "%s"\n' "$KEYSTORE_PATH" >> "$SETTINGS_FILE"
           printf 'export/android/debug_keystore_user = "androiddebugkey"\n' >> "$SETTINGS_FILE"
           printf 'export/android/debug_keystore_pass = "android"\n' >> "$SETTINGS_FILE"
+          echo "::warning::SETTINGS_FILE=$SETTINGS_FILE"
+          echo "::warning::SDK_PATH=$ANDROID_SDK_ROOT"
+          cat "$SETTINGS_FILE" | while IFS= read -r l; do echo "::warning::SET| $l"; done
 
-      - name: Instalar android build template no projeto
+      - name: Instalar android build template
         working-directory: ${{ github.workspace }}
         run: |
           TEMPLATES_DIR="$HOME/.local/share/godot/export_templates/${GODOT_VERSION}.stable"
@@ -75,20 +79,16 @@ jobs:
           touch android/build/.gdignore
           echo "${GODOT_VERSION}.stable" > android/.build_version
           unzip -q "$TEMPLATES_DIR/android_source.zip" -d android/build
-          echo "android/build: $(ls android/build | wc -l) itens"
 
-      - name: Injetar keystore + habilitar gradle no export_presets.cfg
+      - name: Injetar keystore no export_presets.cfg
         working-directory: ${{ github.workspace }}
         run: |
-          KS="$HOME/.android/debug.keystore"
-          # Keystore
+          KS="$KEYSTORE_PATH"
           if ! grep -q "keystore/debug" export_presets.cfg; then
             printf '\nkeystore/debug="%s"\nkeystore/debug_user="androiddebugkey"\nkeystore/debug_password="android"\n' "$KS" >> export_presets.cfg
           else
             sed -i "s|keystore/debug=\".*\"|keystore/debug=\"$KS\"|g" export_presets.cfg
           fi
-          echo "=== export_presets.cfg FINAL ==="
-          cat export_presets.cfg | while IFS= read -r l; do echo "::warning::CFG| $l"; done
 
       - name: Import assets (editor mode com timeout)
         working-directory: ${{ github.workspace }}
@@ -103,9 +103,8 @@ jobs:
         run: |
           mkdir -p build
           APK_OUT="$GITHUB_WORKSPACE/build/${EXPORT_NAME}-debug.apk"
-          echo "::warning::SDK: $(ls $ANDROID_SDK_ROOT/build-tools/ 2>/dev/null | tr '\n' ' ')"
-          echo "::warning::KS: $(ls $HOME/.android/debug.keystore 2>/dev/null || echo AUSENTE)"
-          echo "::warning::android/build: $(ls android/build/ 2>/dev/null | wc -l) itens"
+          echo "::warning::HOME=$HOME | SETTINGS=$(ls $HOME/.config/godot/)"
+          echo "::warning::SDK=$ANDROID_SDK_ROOT BT=$(ls $ANDROID_SDK_ROOT/build-tools/ | head -1)"
           godot --headless --verbose --audio-driver Dummy \
             --path "$GITHUB_WORKSPACE" \
             --export-debug "Android" "$APK_OUT" 2>&1 | \
@@ -114,7 +113,6 @@ jobs:
             echo "::notice::✅ APK GERADO: $(ls -sh $APK_OUT | awk '{print $1}')"
           else
             echo "::error::❌ APK NAO GERADO"
-            ls -la build/ || true
             exit 1
           fi
 
