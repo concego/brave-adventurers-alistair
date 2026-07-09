@@ -29,8 +29,6 @@ jobs:
       - name: Install Android build tools
         run: |
           sdkmanager "build-tools;34.0.0" "platforms;android-34" "ndk;23.2.8568313"
-          echo "SDK: $ANDROID_SDK_ROOT"
-          ls "$ANDROID_SDK_ROOT/build-tools/"
 
       - name: Gerar debug.keystore
         run: |
@@ -54,7 +52,6 @@ jobs:
           unzip -q "Godot_v${GODOT_VERSION}-stable_export_templates.tpz" -d /tmp/tpl
           mv /tmp/tpl/templates/* "$TEMPLATES_DIR/"
           rm -f "Godot_v${GODOT_VERSION}-stable_export_templates.tpz"
-          echo "Templates: $(ls $TEMPLATES_DIR | grep android | tr '\n' ' ')"
 
       - name: Configurar editor settings
         run: |
@@ -69,7 +66,6 @@ jobs:
           printf 'export/android/debug_keystore = "%s/.android/debug.keystore"\n' "$HOME" >> "$SETTINGS_FILE"
           printf 'export/android/debug_keystore_user = "androiddebugkey"\n' >> "$SETTINGS_FILE"
           printf 'export/android/debug_keystore_pass = "android"\n' >> "$SETTINGS_FILE"
-          cat "$SETTINGS_FILE"
 
       - name: Instalar android build template no projeto
         working-directory: ${{ github.workspace }}
@@ -79,23 +75,26 @@ jobs:
           touch android/build/.gdignore
           echo "${GODOT_VERSION}.stable" > android/.build_version
           unzip -q "$TEMPLATES_DIR/android_source.zip" -d android/build
-          echo "android/build criado: $(ls android/build | wc -l) arquivos"
+          echo "android/build: $(ls android/build | wc -l) itens"
 
-      - name: Injetar keystore no export_presets.cfg
+      - name: Injetar keystore + habilitar gradle no export_presets.cfg
         working-directory: ${{ github.workspace }}
         run: |
           KS="$HOME/.android/debug.keystore"
+          # Keystore
           if ! grep -q "keystore/debug" export_presets.cfg; then
             printf '\nkeystore/debug="%s"\nkeystore/debug_user="androiddebugkey"\nkeystore/debug_password="android"\n' "$KS" >> export_presets.cfg
           else
             sed -i "s|keystore/debug=\".*\"|keystore/debug=\"$KS\"|g" export_presets.cfg
           fi
-          grep -i "keystore" export_presets.cfg
+          echo "=== export_presets.cfg FINAL ==="
+          cat export_presets.cfg | while IFS= read -r l; do echo "::warning::CFG| $l"; done
 
       - name: Import assets (editor mode com timeout)
         working-directory: ${{ github.workspace }}
         run: |
-          timeout 30 godot --headless --path "$GITHUB_WORKSPACE" -e 2>&1 | \
+          timeout 30 godot --headless --audio-driver Dummy \
+            --path "$GITHUB_WORKSPACE" -e 2>&1 | \
             while IFS= read -r l; do echo "::warning::IMP| $l"; done || true
           echo "::notice::import: $(find $GITHUB_WORKSPACE/.godot/ -type f 2>/dev/null | wc -l) arquivos"
 
@@ -104,6 +103,9 @@ jobs:
         run: |
           mkdir -p build
           APK_OUT="$GITHUB_WORKSPACE/build/${EXPORT_NAME}-debug.apk"
+          echo "::warning::SDK: $(ls $ANDROID_SDK_ROOT/build-tools/ 2>/dev/null | tr '\n' ' ')"
+          echo "::warning::KS: $(ls $HOME/.android/debug.keystore 2>/dev/null || echo AUSENTE)"
+          echo "::warning::android/build: $(ls android/build/ 2>/dev/null | wc -l) itens"
           godot --headless --verbose --audio-driver Dummy \
             --path "$GITHUB_WORKSPACE" \
             --export-debug "Android" "$APK_OUT" 2>&1 | \
